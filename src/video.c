@@ -38,7 +38,7 @@ static uint8_t priority[VIDEO_HEIGHT][VIDEO_WIDTH];
 /* xGRB 555 to 0x00RRGGBB */
 static uint32_t colour(unsigned pen)
 {
-	const uint16_t word = cave_board.palette[pen & (CAVE_PALETTE_WORDS - 1u)];
+	const uint16_t word = cave_board.palette[pen & (VIDEO->palette_words - 1u)];
 	const uint32_t g = word >> 10 & 31u, r = word >> 5 & 31u, b = word & 31u;
 
 	return (r << 3 | r >> 2) << 16 | (g << 3 | g >> 2) << 8 | (b << 3 | b >> 2);

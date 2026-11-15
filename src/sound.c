@@ -233,6 +233,19 @@ static uint8_t oki_byte(int chip, uint32_t address)
 	return region[(page_of(chip, cave_board.sound.bank[chip * 4 + bank]) << 16) | (address & 0xFFFFu)];
 }
 
+uint8_t cave_sound_ymz_status(void)
+{
+	return 0u;
+}
+
+void cave_sound_ymz_write(int port, uint8_t data)
+{
+	if (port == 0)
+		cave_board.sound.ymz_register = data;
+	else
+		cave_board.sound.ymz[cave_board.sound.ymz_register] = data;
+}
+
 void cave_sound_reset(void)
 {
 	memset(&cave_board.sound, 0, sizeof(cave_board.sound));

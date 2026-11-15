@@ -329,7 +329,9 @@ uint16_t cave_read16(uint32_t address, uint16_t mem_mask)
 	case CAVE_REGION_PALETTE:
 		return cave_board.palette[word_in(r, address)];
 	case CAVE_REGION_OKI:
-		return cave_sound_status(r->unit);    /* the M6295's status: bit n, voice n playing */
+		return cave_sound_status(r->unit);
+	case CAVE_REGION_YMZ280B:
+		return word_in(r, address) & 1u ? cave_sound_ymz_status() : 0u;    /* the M6295's status: bit n, voice n playing */
 	case CAVE_REGION_INPUTS:
 		return r->unit == 0 ? cave_board.in0
 			: (uint16_t)((cave_board.in1 & ~CAVE_EEPROM_DO) | (cave_board.eeprom.out ? CAVE_EEPROM_DO : 0u));
@@ -390,6 +392,10 @@ void cave_write16(uint32_t address, uint16_t data, uint16_t mem_mask)
 	case CAVE_REGION_OKI:
 		if (mem_mask & 0x00FFu)
 			cave_sound_command(r->unit, (uint8_t)data);
+		break;
+	case CAVE_REGION_YMZ280B:
+		if (mem_mask & 0x00FFu)
+			cave_sound_ymz_write((int)(word_in(r, address) & 1u), (uint8_t)data);
 		break;
 	case CAVE_REGION_NMK112:
 		if (mem_mask & 0x00FFu)
@@ -497,6 +503,15 @@ static uint64_t fnv(uint64_t hash, const void *data, size_t size)
 	return hash;
 }
 
+/* the board's own palette RAM, in bytes (the array has room for the largest) */
+static size_t palette_bytes(void)
+{
+	const cave_video_desc *const video = cave_board_description->video;
+
+	return video && video->palette_words && video->palette_words <= CAVE_PALETTE_WORDS
+		? video->palette_words * sizeof(uint16_t) : sizeof(cave_board.palette);
+}
+
 uint64_t cave_state_hash(void)
 {
 	uint64_t hash = 0xCBF29CE484222325ull;
@@ -507,7 +522,7 @@ uint64_t cave_state_hash(void)
 	hash = fnv(hash, cave_board.layer_regs, sizeof(cave_board.layer_regs));
 	hash = fnv(hash, cave_board.sprite_ram, sizeof(cave_board.sprite_ram));
 	hash = fnv(hash, cave_board.video_regs, sizeof(cave_board.video_regs));
-	hash = fnv(hash, cave_board.palette, sizeof(cave_board.palette));
+	hash = fnv(hash, cave_board.palette, palette_bytes());
 	return hash;
 }
 
@@ -524,7 +539,7 @@ const char *cave_dump(const char *path)
 	fwrite(cave_board.layer_regs, 1, sizeof(cave_board.layer_regs), output);
 	fwrite(cave_board.sprite_ram, 1, sizeof(cave_board.sprite_ram), output);
 	fwrite(cave_board.video_regs, 1, sizeof(cave_board.video_regs), output);
-	fwrite(cave_board.palette, 1, sizeof(cave_board.palette), output);
+	fwrite(cave_board.palette, 1, palette_bytes(), output);
 	fclose(output);
 	return NULL;
 }

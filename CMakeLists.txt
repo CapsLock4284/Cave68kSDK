@@ -14,6 +14,7 @@ add_library(cave68k STATIC
 	src/cheats.c
 	src/free_play.c
 	src/boards/donpachi.c
+	src/boards/ddonpach.c
 )
 target_include_directories(cave68k PUBLIC include PRIVATE src)
 set_target_properties(cave68k PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)

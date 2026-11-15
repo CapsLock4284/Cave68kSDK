@@ -38,7 +38,7 @@ extern "C" {
 #define CAVE_WORK_RAM_SIZE    0x10000u
 #define CAVE_LAYER_RAM_WORDS  0x4000u       /* 32 KB a layer (tmap038: 16x16 RAM, line RAM, 8x8 RAM) */
 #define CAVE_SPRITE_RAM_WORDS 0x8000u       /* 64 KB */
-#define CAVE_PALETTE_WORDS    0x800u        /* A08000-A08FFF */
+#define CAVE_PALETTE_WORDS    0x8000u       /* the most a board has (DoDonPachi's 64 KB; DonPachi's is 0x800) */
 #define CAVE_VIDEO_REG_WORDS  0x40u
 #define CAVE_EEPROM_WORDS     64u           /* 93C46, 16-bit words */
 #define CAVE_STACK_FLOOR      0x10F800u     /* the 68000's stack, down from 110000 (reset's SP): the decompiled

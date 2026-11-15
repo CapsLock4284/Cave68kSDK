@@ -102,6 +102,7 @@ static const cave_video_desc donpachi_video = {
 	0x13, -0x12,
 	0x400, 0x400 + 63 * 16,
 	CAVE_SPRITES_013, 0x2000u,
+	0x800u,                     /* the palette: A08000-A08FFF */
 };
 
 static const cave_sound_desc donpachi_sound = {

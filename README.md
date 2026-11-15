@@ -20,7 +20,7 @@ the sprite format, the sound chips and the ROM files. Each game gets a **board d
 | Part | Type | What it says |
 |---|---|---|
 | Bus | `cave_region[]` | address ranges and the device behind each (program ROM, work RAM, a layer's RAM, palette, M6295, NMK112, inputs, EEPROM, …), looked through in order |
-| ROM set | `cave_rom_desc` | the versions (MAME's sets, parent and clones), their files by name, CRC32 and size, and where each file is loaded |
+| ROM set | `cave_rom_desc` | the versions (MAME's sets, parent and clones), their files by name, CRC32 and size, and where each file is loaded (as is, byte-swapped, or interleaved into even and odd bytes) |
 | Picture | `cave_video_desc` | the number of layers, which are 8×8 only, the layer offsets, colour bases, sprite format and sprite bank size |
 | Sound | `cave_sound_desc` | the chip kind, clocks, divisor, mix levels and NMK112 layout |
 
@@ -48,6 +48,7 @@ Until a game chooses, the board is DonPachi's.
 | `src/cheats.c`, `src/free_play.c` | MAME-format cheats; free play |
 | `src/inflate.c` | Deflate for .zip reading |
 | `src/boards/donpachi.c` | DonPachi's description (US and Japanese sets) |
+| `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus and ROM set done; picture and sound settings still to check |
 
 ## Building
 
@@ -80,9 +81,11 @@ this are in DonPachi Recomp's `tests/harness`.
 1. **Done:** the runtime split out of DonPachi Recomp, with its history.
 2. **Done:** the board description: bus, ROM set, picture and sound settings taken out of the code and into
    `src/boards/donpachi.c`, with DonPachi unchanged (identical traces).
-3. DonPachi Recomp builds against this SDK as a submodule instead of its own copy of the runtime.
-4. A second game: DoDonPachi. This needs the YMZ280B sound chip, its own bus map and ROM set, and the
-   recompiler run on its program.
+3. **Done:** DonPachi Recomp builds against this SDK as its `runtime/` submodule.
+4. **Started:** a second game, DoDonPachi. Done: its bus map and ROM set (both versions load; the program's
+   two chips interleaved; a 64 KB palette). To do: the YMZ280B sound chip, its 8-bit-a-pixel text layer and
+   its palette, its sprites checked against MAME, the board's interrupt timing, and the recompiler run on its
+   program.
 5. More of the family as they are wanted: the 013's zooming sprite format, row-scroll and row-select on the
    layers, flipped screens, other screen sizes (384×240 boards) and four-layer boards.
 

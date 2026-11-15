@@ -36,6 +36,8 @@ typedef enum
 	CAVE_REGION_OKI,            /* an OKI M6295 ('unit': which): its status read, its commands written, the word's
 	                               low byte */
 	CAVE_REGION_NMK112,         /* the NMK112's bank registers: written, the word's low byte */
+	CAVE_REGION_YMZ280B,        /* the YMZ280B: word 0 its register number, word 1 the register's data (written) or its
+	                               status (read), the word's low byte */
 	CAVE_REGION_INPUTS,         /* the inputs ('unit' 0 or 1: IN0, IN1); IN1 has the EEPROM's data out (bit 11) */
 	CAVE_REGION_EEPROM          /* the EEPROM's lines: written (a byte write's byte; bit 3 data in, 1 select,
 	                               2 clock) */
@@ -73,11 +75,21 @@ typedef struct
 	uint32_t crc, size;         /* how it is known, whatever its name */
 } cave_rom_file;
 
-/* A file's place: file 'file' (in the version's list) copied to 'offset' in 'region', its bytes swapped in pairs
-   when 'swapped' (a 68000 program or a sprite ROM read as MAME's ROM_LOAD16_WORD_SWAP) */
+/* How a file's bytes go into its region */
+typedef enum
+{
+	CAVE_LOAD_PLAIN,            /* as they are (MAME's ROM_LOAD) */
+	CAVE_LOAD_SWAPPED,          /* swapped in pairs (ROM_LOAD16_WORD_SWAP) */
+	CAVE_LOAD_EVEN,             /* to every other byte from 'offset': the 16-bit words' high bytes (ROM_LOAD16_BYTE
+	                               at an even offset) */
+	CAVE_LOAD_ODD               /* the same from 'offset' + 1: the words' low bytes */
+} cave_load_mode;
+
+/* A file's place: file 'file' (in the version's list) put at 'offset' in 'region', as 'mode' says
+   (cave_load_mode) */
 typedef struct
 {
-	uint8_t file, region, swapped;
+	uint8_t file, region, mode;
 	uint32_t offset;
 } cave_rom_load;
 
@@ -118,19 +130,22 @@ typedef struct
 	uint16_t background_pen;
 	cave_sprite_format sprites;
 	uint32_t sprite_bank_words; /* a bank of the sprite RAM (the program shows one by video register 4) */
+	uint32_t palette_words;     /* the palette RAM's words (at most CAVE_PALETTE_WORDS) */
 } cave_video_desc;
 
 /* ---- the sound ---- */
 
 typedef enum
 {
-	CAVE_SOUND_OKI_NMK112       /* two OKI M6295s behind an NMK112's banks */
+	CAVE_SOUND_OKI_NMK112,      /* two OKI M6295s behind an NMK112's banks */
+	CAVE_SOUND_YMZ280B          /* one Yamaha YMZ280B (8 voices of ADPCM or PCM), its samples in CAVE_ROM_SOUND0
+	                               (not played yet: the board is silent) */
 } cave_sound_kind;
 
 typedef struct
 {
 	cave_sound_kind kind;
-	uint32_t clock[2];          /* each chip's clock, Hz */
+	uint32_t clock[2];          /* each chip's clock, Hz (the YMZ280B: clock[0]) */
 	uint16_t divisor;           /* clocks a sample (132: pin 7 high) */
 	double gain[2];             /* each chip's level in the mix */
 	uint32_t skip;              /* the empty bytes at the start of each chip's region (the NMK112's old layout) */

@@ -61,6 +61,9 @@ typedef struct
 {
 	cave_oki oki[2];
 	uint8_t bank[8];      /* the NMK112: chip #0's 4 banks of 64 KB, then #1's */
+	uint8_t ymz_register; /* a YMZ280B board's: the register the program chose, and what it wrote to each (the chip
+	                         is not played yet) */
+	uint8_t ymz[256];
 	bool frame_begun;     /* (the frame's samples counted: 'due') */
 	uint64_t frame_began; /* the 68000's time as the frame began (cave_sound_clock's cycles) */
 } cave_sound;
@@ -69,6 +72,11 @@ typedef struct
 uint8_t cave_sound_status(int chip);
 void cave_sound_command(int chip, uint8_t data);
 void cave_sound_bank(int which, uint8_t data);
+
+/* A YMZ280B board's: its status (bit n: voice n ended; not played yet, so 0), and a write: 'port' 0 chooses the
+   register, 1 writes it */
+uint8_t cave_sound_ymz_status(void);
+void cave_sound_ymz_write(int port, uint8_t data);
 
 /* The chips after the board's reset: silent, no command waiting */
 void cave_sound_reset(void);

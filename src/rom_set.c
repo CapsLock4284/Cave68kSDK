@@ -288,7 +288,7 @@ static void free_chips(uint8_t **chips)
 	}
 }
 
-/* a file's bytes to its place in 'set' (the regions already there): swapped in pairs as the load says */
+/* a file's bytes to its place in 'set' (the regions already there), as the load says */
 static void put_file(cave_rom_set *set, const cave_rom_load *load, const uint8_t *chip)
 {
 	const uint32_t size = files[load->file].size;
@@ -300,14 +300,24 @@ static void put_file(cave_rom_set *set, const cave_rom_load *load, const uint8_t
 			set->eeprom[word] = (uint16_t)(chip[2 * word] << 8 | chip[2 * word + 1]);    /* (16-bit, big endian) */
 		return;
 	}
-	if (load->swapped)    /* ROM_LOAD16_WORD_SWAP: each 16-bit word's bytes the other way round */
+	switch (load->mode)
+	{
+	case CAVE_LOAD_SWAPPED:    /* ROM_LOAD16_WORD_SWAP: each 16-bit word's bytes the other way round */
 		for (uint32_t i = 0; i + 1u < size; i += 2u)
 		{
 			(*target)[load->offset + i] = chip[i + 1u];
 			(*target)[load->offset + i + 1u] = chip[i];
 		}
-	else
+		break;
+	case CAVE_LOAD_EVEN:       /* ROM_LOAD16_BYTE: every other byte */
+	case CAVE_LOAD_ODD:
+		for (uint32_t i = 0; i < size; i++)
+			(*target)[load->offset + (load->mode == CAVE_LOAD_ODD) + 2u * i] = chip[i];
+		break;
+	default:
 		memcpy(*target + load->offset, chip, size);
+		break;
+	}
 }
 
 /* the description's loads checked: each file inside its region */
@@ -317,8 +327,11 @@ static bool loads_fit(void)
 	{
 		const cave_rom_load *const load = &ROMS->loads[index];
 
+		const uint32_t span = load->mode == CAVE_LOAD_EVEN || load->mode == CAVE_LOAD_ODD
+			? 2u * files[load->file].size : files[load->file].size;
+
 		if (load->file >= files_count || load->region >= CAVE_ROM_REGIONS
-				|| load->offset + files[load->file].size > ROMS->region_size[load->region])
+				|| load->offset + span > ROMS->region_size[load->region])
 			return false;
 	}
 	return true;
