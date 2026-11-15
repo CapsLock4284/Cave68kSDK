@@ -1,7 +1,7 @@
 /**
  *    Name:        sound.c
- *    Description: DonPachi's sound (cave/sound.h): the two OKI M6295s, their ADPCM, the NMK112's banks, and the mix
- *                 the ports play
+ *    Description: the sound (cave/sound.h), as the game's description has it: two OKI M6295s, their ADPCM, the
+ *                 NMK112's banks, and the mix the ports play
  *    Version:     0.1.0 (draft)
  *    Created:     09-11-2026
  *
@@ -15,6 +15,7 @@
  *    (BSD-3-Clause, Olivier Galibert): the high-pass filter, and src/emu/sound.cpp's mix: MAME's defaults.
  */
 #include "cave/sound.h"
+#include "cave/board.h"
 #include "cave/machine.h"
 #include "cave/rom_set.h"
 
@@ -22,19 +23,40 @@
 #include <string.h>
 
 #define FRAME_USEC      CAVE_FRAME_USEC     /* the board's frame: 17376 us (MAME's timer) */
-#define OKI_DIVISOR     132u                /* pin 7 high */
 #define OUTPUT_SIZE     32768u              /* the output's ring: a power of 2, about 0.7 s */
 #define HIGH_PASS_HZ    20.0                /* the speaker's filter (audio_effect_filter: on, at 20 Hz, Q 0.7071) */
 #define HIGH_PASS_Q     0.7071067f
 #define HISTORY         4                   /* the resampler's samples from the frame before */
 
-static const uint32_t oki_clock[2] = { 4220000u / 4u, 4220000u / 2u };
-static const double oki_gain[2] = { 1.60, 1.0 };
+/* the game's chips (cave/board.h's cave_sound_desc): their clocks, divisor and levels; their ROM regions, kept after
+   'skip' empty bytes (the NMK112's old layout: DonPachi's "oki1" atdp.u33, "oki2" atdp.u32 then atdp.u33) */
+#define SOUND           (cave_board_description->sound)
+#define OKI_DIVISOR     (SOUND->divisor)
+#define REGION_SKIP     (SOUND->skip)
 
-/* the ROM regions as cave.cpp has them now ("oki1": atdp.u33; "oki2": atdp.u32 then atdp.u33): rom_set.c keeps
-   them after 0x40000 empty bytes, the NMK112's old layout */
-#define REGION_SKIP     0x40000u
-static const uint32_t region_size[2] = { DONPACHI_OKI1_SIZE - REGION_SKIP, DONPACHI_OKI2_SIZE - REGION_SKIP };
+/* each chip's 64 KB pages, and the mask over its bank values (the pages rounded up to a power of 2, less 1), for
+   the description they were counted for */
+static uint32_t chip_pages[2], chip_mask[2];
+static uint32_t chip_skip;
+static uint8_t chip_paged;
+static const void *pages_for;
+
+static void count_pages(void)
+{
+	for (int chip = 0; chip < 2; chip++)
+	{
+		const uint32_t pages = (rom_set_region_size(CAVE_ROM_SOUND0 + chip) - REGION_SKIP) >> 16;
+		uint32_t mask = pages - 1u;
+
+		while (mask & (mask + 1u))
+			mask |= mask >> 1;
+		chip_pages[chip] = pages;
+		chip_mask[chip] = mask;
+	}
+	chip_skip = REGION_SKIP;
+	chip_paged = SOUND->paged_table;
+	pages_for = cave_board_description;
+}
 
 /* MAME's s_volume_table, in 32nds: 0, -3.2, -6, -9.2, -12, -14.5, -18, -20.5, -24 dB, then silent */
 static const int volume_table[16] = { 0x20, 0x16, 0x10, 0x0b, 0x08, 0x06, 0x04, 0x03, 0x02, 0, 0, 0, 0, 0, 0, 0 };
@@ -129,7 +151,7 @@ static void begin_frame(void)
 	{
 		cave_oki *const oki = &cave_board.sound.oki[chip];
 
-		oki->clocks += (uint64_t)oki_clock[chip] * FRAME_USEC;
+		oki->clocks += (uint64_t)SOUND->clock[chip] * FRAME_USEC;
 		oki->due = (uint32_t)(oki->clocks / per_sample);
 		oki->clocks %= per_sample;
 		if (oki->due > CAVE_SOUND_FRAME_MOST)
@@ -179,12 +201,11 @@ static void catch_up(bool to_the_end)
    entries; an entry past the ROM folds back onto it (its highest bit dropped) */
 static uint32_t page_of(int chip, uint8_t value)
 {
-	const uint32_t pages = region_size[chip] >> 16;
-	uint32_t mask = pages - 1u;
+	uint32_t pages, mask, page;
 
-	while (mask & (mask + 1u))
-		mask |= mask >> 1;
-	uint32_t page = value & mask;
+	pages = chip_pages[chip];
+	mask = chip_mask[chip];
+	page = value & mask;
 	while (page >= pages)
 	{
 		uint32_t high = mask + 1u;
@@ -200,11 +221,14 @@ static uint32_t page_of(int chip, uint8_t value)
    come with the banks too, each from its own bank's page */
 static uint8_t oki_byte(int chip, uint32_t address)
 {
-	const uint8_t *const region = rom_set.oki[chip] + REGION_SKIP;
+	const uint8_t *region;
 	const unsigned bank = (address >> 16) & 3u;
 
+	if (pages_for != cave_board_description)
+		count_pages();
+	region = rom_set.oki[chip] + chip_skip;
 	address &= 0x3FFFFu;
-	if (chip == 1 && address < 0x400u)
+	if ((chip_paged >> chip & 1u) && address < 0x400u)
 		return region[(page_of(chip, cave_board.sound.bank[4 + (address >> 8)]) << 16) | address];
 	return region[(page_of(chip, cave_board.sound.bank[chip * 4 + bank]) << 16) | (address & 0xFFFFu)];
 }
@@ -365,8 +389,8 @@ void cave_sound_frame(void)
 		for (int chip = 0; chip < 2; chip++)
 		{
 			if (cave_board.sound.oki[chip].made)
-				mixed += (float)oki_gain[chip] * lofi(chip, resample_position[chip]);
-			resample_position[chip] += (double)oki_clock[chip] / OKI_DIVISOR / CAVE_SOUND_RATE;
+				mixed += (float)SOUND->gain[chip] * lofi(chip, resample_position[chip]);
+			resample_position[chip] += (double)SOUND->clock[chip] / OKI_DIVISOR / CAVE_SOUND_RATE;
 		}
 		/* the speaker's high-pass (filter.h's history and apply) */
 		hp_x[2] = hp_x[1];

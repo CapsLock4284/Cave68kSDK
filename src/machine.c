@@ -1,17 +1,18 @@
 /**
  *    Name:        machine.c
- *    Description: DonPachi's board: the 68000's bus (cave/machine.h's map), the interrupt and its cause, the
- *                 inputs and the 93C46 EEPROM
+ *    Description: the board: the 68000's bus (as the game's description has it: cave/board.h), the interrupt and
+ *                 its cause, the inputs and the 93C46 EEPROM
  *    Version:     0.1.0 (draft)
  *    Created:     09-11-2026
  *
  *    license:BSD-3-Clause
- *    After MAME's src/mame/cave/cave.cpp (BSD-3-Clause): donpachi_map, donpachi_videoregs_r, irq_cause_r,
+ *    After MAME's src/mame/cave/cave.cpp (BSD-3-Clause): its memory maps (the games' in src/boards/), videoregs_r, irq_cause_r,
  *    update_irq_state, eeprom_w; the EEPROM after src/devices/machine/eepromser.cpp (93C46, 64 words of 16 bits).
  *    The sound chips: cave/sound.h (sound.c). B00000-B00003, B00010-B00013 and B00020-B0002F take the word's low byte
  *    (MAME's umask16(0x00ff)).
  */
 #include "cave/machine.h"
+#include "cave/boards.h"
 #include "cave/rom_set.h"
 
 #include <stdio.h>
@@ -179,101 +180,233 @@ static void combine(uint16_t *word, uint16_t data, uint16_t mem_mask)
 	*word = (uint16_t)((*word & ~mem_mask) | (data & mem_mask));
 }
 
-uint16_t cave_read16(uint32_t address, uint16_t mem_mask)
+/* ---- the board's description (cave/board.h) ---- */
+
+const cave_board_desc *cave_board_description = &cave_board_donpachi;
+
+/* the regions in each 64 KB page of the bus, in the description's order: the bus looks only through its address's
+   page (a few regions at most), as fast as the fixed map it replaces */
+#define PAGES       256
+#define PAGE_MOST   6
+static const cave_region *pages[PAGES][PAGE_MOST];
+static uint8_t page_count[PAGES];
+static const cave_board_desc *paged;    /* (the description the pages are for) */
+/* the program ROM and the work RAM, the regions most reads and writes are for, looked at before the pages */
+static uint32_t program_end, work_start, work_end;
+
+/* a page that holds one plain RAM and nothing else (a layer's, the sprites', the palette): its words, straight */
+typedef struct
 {
-	(void)mem_mask;
-	address &= 0xFFFFFEu;
-	if (address < CAVE_PROGRAM_SIZE)
-		return cave_board.program ? (uint16_t)(cave_board.program[address] << 8 | cave_board.program[address + 1u]) : 0u;
-	if (address >= CAVE_WORK_RAM && address < CAVE_WORK_RAM + CAVE_WORK_RAM_SIZE)
-		return *(uint16_t *)cave_work_ram_at(address, 2u);
-	if (address >= 0x200000u && address < 0x208000u)
-		return cave_board.layer_ram[1][(address - 0x200000u) >> 1];
-	if (address >= 0x300000u && address < 0x308000u)
-		return cave_board.layer_ram[0][(address - 0x300000u) >> 1];
-	if (address >= 0x400000u && address < 0x408000u)
-		return cave_board.layer_ram[2][0x2000u + ((address & 0x3FFFu) >> 1)];
-	if (address >= 0x500000u && address < 0x510000u)
-		return cave_board.sprite_ram[(address - 0x500000u) >> 1];
-	if (address >= 0x600000u && address < 0x600006u)
-		return cave_board.layer_regs[1][(address - 0x600000u) >> 1];
-	if (address >= 0x700000u && address < 0x700006u)
-		return cave_board.layer_regs[0][(address - 0x700000u) >> 1];
-	if (address >= 0x800000u && address < 0x800006u)
-		return cave_board.layer_regs[2][(address - 0x800000u) >> 1];
-	if (address >= 0x900000u && address < 0x900080u)
-		return address < 0x900008u ? irq_cause((address - 0x900000u) >> 1) : 0u;
-	if (address >= 0xA08000u && address < 0xA09000u)
-		return cave_board.palette[(address - 0xA08000u) >> 1];
-	if (address >= 0xB00000u && address < 0xB00004u)
-		return cave_sound_status(0);    /* M6295 #0's status: bit n, voice n playing */
-	if (address >= 0xB00010u && address < 0xB00014u)
-		return cave_sound_status(1);    /* M6295 #1's */
-	if (address == 0xC00000u)
-		return cave_board.in0;
-	if (address == 0xC00002u)
-		return (uint16_t)((cave_board.in1 & ~CAVE_EEPROM_DO) | (cave_board.eeprom.out ? CAVE_EEPROM_DO : 0u));
+	uint16_t *ram;              /* NULL: the page is not one */
+	uint32_t start, end, mask;
+	uint32_t offset;
+} ram_page;
+static ram_page ram_pages[PAGES];
+
+static uint16_t *ram_of(const cave_region *r)
+{
+	switch (r->kind)
+	{
+	case CAVE_REGION_LAYER_RAM: return cave_board.layer_ram[r->unit];
+	case CAVE_REGION_SPRITE_RAM: return cave_board.sprite_ram;
+	case CAVE_REGION_PALETTE: return cave_board.palette;
+	default: return NULL;
+	}
+}
+
+static void make_pages(void)
+{
+	const cave_board_desc *const d = cave_board_description;
+
+	memset(page_count, 0, sizeof(page_count));
+	memset(ram_pages, 0, sizeof(ram_pages));
+	program_end = work_start = work_end = 0u;
+	for (int i = 0; i < d->map_count; i++)
+	{
+		const cave_region *const r = &d->map[i];
+
+		for (uint32_t page = r->start >> 16; page <= ((r->end - 1u) >> 16) && page < PAGES; page++)
+			if (page_count[page] < PAGE_MOST)
+				pages[page][page_count[page]++] = r;
+		if (r->kind == CAVE_REGION_PROGRAM && r->start == 0u && !program_end)
+			program_end = r->end;
+		if (r->kind == CAVE_REGION_WORK_RAM && !work_end)
+		{
+			work_start = r->start;
+			work_end = r->end;
+		}
+	}
+	for (int page = 0; page < PAGES; page++)
+		if (page_count[page] == 1 && ram_of(pages[page][0]))
+		{
+			const cave_region *const r = pages[page][0];
+
+			ram_pages[page] = (ram_page){ ram_of(r), r->start, r->end, r->mask ? r->mask : 0xFFFFFFFFu, r->offset };
+		}
+	paged = d;
+}
+
+void cave_board_describe(const cave_board_desc *description)
+{
+	cave_board_description = description ? description : &cave_board_donpachi;
+	make_pages();
+}
+
+/* the region of the bus that holds 'address' (reads skip CAVE_REGION_IGNORED's), or NULL */
+static const cave_region *region_at(uint32_t address, int writing)
+{
+	const uint32_t page = address >> 16 & (PAGES - 1u);
+
+	for (int i = 0; i < page_count[page]; i++)
+	{
+		const cave_region *const r = pages[page][i];
+
+		if (address >= r->start && address < r->end && (writing || r->kind != CAVE_REGION_IGNORED))
+			return r;
+	}
+	return NULL;
+}
+
+/* a region's word for 'address': its offset, the address's bits it uses (all of its size, or its mask's) */
+static uint32_t word_in(const cave_region *r, uint32_t address)
+{
+	const uint32_t from = address - r->start;
+
+	return r->offset + ((r->mask ? from & r->mask : from) >> 1);
+}
+
+static uint16_t unmapped_read(uint32_t address)
+{
 	cave_board.unmapped_reads++;
 	cave_board.last_unmapped_read = address;
-	return 0u;    /* (as MAME's: the address space's unmapped value, 0 for this board) */
+	return 0u;    /* (as MAME's: the address space's unmapped value, 0 for these boards) */
+}
+
+static void unmapped_write(uint32_t address)
+{
+	cave_board.unmapped_writes++;    /* (the program ROM, and what no device answers) */
+	cave_board.last_unmapped_write = address;
+}
+
+uint16_t cave_read16(uint32_t address, uint16_t mem_mask)
+{
+	const cave_region *r;
+
+	(void)mem_mask;
+	address &= 0xFFFFFEu;
+	if (paged != cave_board_description)
+		make_pages();
+	if (address < program_end)
+		return cave_board.program ? (uint16_t)(cave_board.program[address] << 8 | cave_board.program[address + 1u]) : 0u;
+	if (address - work_start < work_end - work_start)
+		return *(uint16_t *)cave_work_ram_at(address, 2u);
+	{
+		const ram_page *const p = &ram_pages[address >> 16 & (PAGES - 1u)];
+
+		if (p->ram && address >= p->start && address < p->end)
+			return p->ram[p->offset + (((address - p->start) & p->mask) >> 1)];
+	}
+	if (!(r = region_at(address, 0)))
+		return unmapped_read(address);
+	switch (r->kind)
+	{
+	case CAVE_REGION_PROGRAM:
+		return cave_board.program ? (uint16_t)(cave_board.program[address] << 8 | cave_board.program[address + 1u]) : 0u;
+	case CAVE_REGION_WORK_RAM:
+		return *(uint16_t *)cave_work_ram_at(address, 2u);
+	case CAVE_REGION_LAYER_RAM:
+		return cave_board.layer_ram[r->unit][word_in(r, address)];
+	case CAVE_REGION_LAYER_REGS:
+		return cave_board.layer_regs[r->unit][word_in(r, address)];
+	case CAVE_REGION_SPRITE_RAM:
+		return cave_board.sprite_ram[word_in(r, address)];
+	case CAVE_REGION_VIDEO_REGS:
+	{
+		const uint32_t word = word_in(r, address);
+
+		return word < 4u ? irq_cause(word) : 0u;
+	}
+	case CAVE_REGION_PALETTE:
+		return cave_board.palette[word_in(r, address)];
+	case CAVE_REGION_OKI:
+		return cave_sound_status(r->unit);    /* the M6295's status: bit n, voice n playing */
+	case CAVE_REGION_INPUTS:
+		return r->unit == 0 ? cave_board.in0
+			: (uint16_t)((cave_board.in1 & ~CAVE_EEPROM_DO) | (cave_board.eeprom.out ? CAVE_EEPROM_DO : 0u));
+	default:
+		return unmapped_read(address);    /* (written only: the NMK112, the EEPROM's lines) */
+	}
 }
 
 void cave_write16(uint32_t address, uint16_t data, uint16_t mem_mask)
 {
+	const cave_region *r;
+
 	address &= 0xFFFFFEu;
-	if (address >= CAVE_WORK_RAM && address < CAVE_WORK_RAM + CAVE_WORK_RAM_SIZE)
+	if (paged != cave_board_description)
+		make_pages();
+	if (address - work_start < work_end - work_start)
 	{
 		combine((uint16_t *)cave_work_ram_at(address, 2u), data, mem_mask);
 		return;
 	}
-	if (address >= 0x200000u && address < 0x208000u)
-		combine(&cave_board.layer_ram[1][(address - 0x200000u) >> 1], data, mem_mask);
-	else if (address >= 0x300000u && address < 0x308000u)
-		combine(&cave_board.layer_ram[0][(address - 0x300000u) >> 1], data, mem_mask);
-	else if (address >= 0x400000u && address < 0x408000u)
-		combine(&cave_board.layer_ram[2][0x2000u + ((address & 0x3FFFu) >> 1)], data, mem_mask);
-	else if (address >= 0x500000u && address < 0x510000u)
-		combine(&cave_board.sprite_ram[(address - 0x500000u) >> 1], data, mem_mask);
-	else if (address >= 0x600000u && address < 0x600006u)
-		combine(&cave_board.layer_regs[1][(address - 0x600000u) >> 1], data, mem_mask);
-	else if (address >= 0x700000u && address < 0x700006u)
-		combine(&cave_board.layer_regs[0][(address - 0x700000u) >> 1], data, mem_mask);
-	else if (address >= 0x800000u && address < 0x800006u)
-		combine(&cave_board.layer_regs[2][(address - 0x800000u) >> 1], data, mem_mask);
-	else if (address == 0x900078u)
-		;    /* the watchdog (sprite013.cpp: "offset 0x68 or 0x78 is commonly watchdog"): the interrupt writes it
-		        whatever D0 holds, a value the decompiled program does not have */
-	else if (address >= 0x900000u && address < 0x900080u)
-		combine(&cave_board.video_regs[(address - 0x900000u) >> 1], data, mem_mask);
-	else if (address >= 0xA08000u && address < 0xA09000u)
-		combine(&cave_board.palette[(address - 0xA08000u) >> 1], data, mem_mask);
-	else if (address >= 0xB00000u && address < 0xB00004u)
 	{
-		if (mem_mask & 0x00FFu)
-			cave_sound_command(0, (uint8_t)data);
+		const ram_page *const p = &ram_pages[address >> 16 & (PAGES - 1u)];
+
+		if (p->ram && address >= p->start && address < p->end)
+		{
+			combine(&p->ram[p->offset + (((address - p->start) & p->mask) >> 1)], data, mem_mask);
+			return;
+		}
 	}
-	else if (address >= 0xB00010u && address < 0xB00014u)
+	if (!(r = region_at(address, 1)))
 	{
-		if (mem_mask & 0x00FFu)
-			cave_sound_command(1, (uint8_t)data);
+		unmapped_write(address);
+		return;
 	}
-	else if (address >= 0xB00020u && address < 0xB00030u)
+	switch (r->kind)
 	{
+	case CAVE_REGION_WORK_RAM:
+		combine((uint16_t *)cave_work_ram_at(address, 2u), data, mem_mask);
+		break;
+	case CAVE_REGION_LAYER_RAM:
+		combine(&cave_board.layer_ram[r->unit][word_in(r, address)], data, mem_mask);
+		break;
+	case CAVE_REGION_LAYER_REGS:
+		combine(&cave_board.layer_regs[r->unit][word_in(r, address)], data, mem_mask);
+		break;
+	case CAVE_REGION_SPRITE_RAM:
+		combine(&cave_board.sprite_ram[word_in(r, address)], data, mem_mask);
+		break;
+	case CAVE_REGION_IGNORED:
+		break;    /* the watchdog (sprite013.cpp: "offset 0x68 or 0x78 is commonly watchdog"): the interrupt writes it
+		             whatever D0 holds, a value the decompiled program does not have */
+	case CAVE_REGION_VIDEO_REGS:
+		combine(&cave_board.video_regs[word_in(r, address)], data, mem_mask);
+		break;
+	case CAVE_REGION_PALETTE:
+		combine(&cave_board.palette[word_in(r, address)], data, mem_mask);
+		break;
+	case CAVE_REGION_OKI:
 		if (mem_mask & 0x00FFu)
-			cave_sound_bank((int)((address - 0xB00020u) >> 1), (uint8_t)data);
-	}
-	else if (address == 0xD00000u)
+			cave_sound_command(r->unit, (uint8_t)data);
+		break;
+	case CAVE_REGION_NMK112:
+		if (mem_mask & 0x00FFu)
+			cave_sound_bank((int)word_in(r, address), (uint8_t)data);
+		break;
+	case CAVE_REGION_EEPROM:
 	{
-		/* (a byte at D00000: the word's high half) */
+		/* (a byte write: its byte; at an even address the word's high half) */
 		const uint8_t lines = (mem_mask & 0xFF00u) ? (uint8_t)(data >> 8) : (uint8_t)data;
 
 		cave_board.eeprom_lines = lines;
 		eeprom_write_lines(lines);
+		break;
 	}
-	else
-	{
-		cave_board.unmapped_writes++;    /* (the program ROM, and what no device answers) */
-		cave_board.last_unmapped_write = address;
+	default:
+		unmapped_write(address);    /* (the program ROM, the inputs) */
+		break;
 	}
 }
 
@@ -300,7 +433,7 @@ static int eeprom_changed_bytes(const uint8_t *bytes, bool little)
 {
 	int changed = 0;
 
-	for (int word = 0; word < CAVE_EEPROM_WORDS; word++)
+	for (int word = 0; word < (int)CAVE_EEPROM_WORDS; word++)
 	{
 		const uint16_t value = little ? (uint16_t)(bytes[2 * word] | bytes[2 * word + 1] << 8)
 			: (uint16_t)(bytes[2 * word] << 8 | bytes[2 * word + 1]);
@@ -328,7 +461,7 @@ int cave_eeprom_load(const char *path)
 	   the wrong way round a file has more of them changed (the ROM set's first words, 000C FFFB, are not the same
 	   swapped). A tie (both of a word's bytes changed, the same way round): MAME's */
 	little = eeprom_changed_bytes(bytes, true) <= eeprom_changed_bytes(bytes, false);
-	for (int word = 0; word < CAVE_EEPROM_WORDS; word++)
+	for (int word = 0; word < (int)CAVE_EEPROM_WORDS; word++)
 		cave_board.eeprom.words[word] = little ? (uint16_t)(bytes[2 * word] | bytes[2 * word + 1] << 8)
 			: (uint16_t)(bytes[2 * word] << 8 | bytes[2 * word + 1]);
 	return 1;
@@ -340,7 +473,7 @@ const char *cave_eeprom_save(const char *path)
 	FILE *file;
 	bool written;
 
-	for (int word = 0; word < CAVE_EEPROM_WORDS; word++)
+	for (int word = 0; word < (int)CAVE_EEPROM_WORDS; word++)
 	{
 		bytes[2 * word] = (uint8_t)cave_board.eeprom.words[word];    /* (little endian: MAME's nvram) */
 		bytes[2 * word + 1] = (uint8_t)(cave_board.eeprom.words[word] >> 8);

@@ -1,0 +1,6 @@
+# builds
+/build/
+# never in the repository: ROM sets and anything extracted from them
+*.zip
+*.dat
+/rom/

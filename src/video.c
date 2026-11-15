@@ -1,6 +1,6 @@
 /**
  *    Name:        video.c
- *    Description: DonPachi's picture from the board's memories (cave/video.h)
+ *    Description: the picture from the board's memories (cave/video.h), as the game's description has it
  *    Version:     0.1.0 (draft)
  *    Created:     09-11-2026
  *
@@ -11,17 +11,26 @@
  */
 #include "cave/video.h"
 
+#include "cave/board.h"
 #include "cave/machine.h"
 #include "cave/rom_set.h"
 
 #include <string.h>
 
-#define LAYER_OFFS_X       0x13      /* video_start: m_layers_offs_x */
-#define LAYER_OFFS_Y       (-0x12)
-#define LAYER_COLOR_BASE   0x400     /* gfx_donpachi: the layers' colours from 400, 64 palettes of 16 */
-#define BACKGROUND_PEN     (0x400 + 63 * 16)
-#define SPRITE_BANK_WORDS  0x2000u   /* 0x4000 bytes a bank */
+/* the game's picture (cave/board.h's cave_video_desc: DonPachi's offsets 0x13 and -0x12, its layers' colours from
+   400, 64 palettes of 16, its sprite RAM in banks of 0x4000 bytes) */
+#define VIDEO              (cave_board_description->video)
 #define MAX_SPRITE_CLOCK   (448u * 272u * 2u)    /* sprite013: what the chip can draw in a frame */
+
+/* the graphics' sizes, from the description (taken as each frame is drawn or its sprites latched) */
+static uint32_t layer_tiles[4], sprites_mask;
+
+static void take_sizes(void)
+{
+	for (int layer = 0; layer < 4; layer++)
+		layer_tiles[layer] = rom_set_region_size(CAVE_ROM_LAYER0 + layer) / 32u;
+	sprites_mask = rom_set_region_size(CAVE_ROM_SPRITES) - 1u;
+}
 
 static uint16_t sprite_layer[VIDEO_HEIGHT][VIDEO_WIDTH];    /* pen | colour and priority << 8, 0 for none */
 static uint8_t priority[VIDEO_HEIGHT][VIDEO_WIDTH];
@@ -42,8 +51,8 @@ static unsigned layer_pixel(int layer, unsigned x, unsigned y, unsigned *palette
 {
 	const uint16_t *const ram = cave_board.layer_ram[layer];
 	const uint8_t *const gfx = rom_set.layer[layer];
-	const uint32_t tiles = (layer == 2 ? DONPACHI_LAYER2_SIZE : DONPACHI_LAYER01_SIZE) / 32u;
-	const int big = (cave_board.layer_regs[layer][1] & 0x2000u) != 0 && layer != 2;
+	const uint32_t tiles = layer_tiles[layer];
+	const int big = (cave_board.layer_regs[layer][1] & 0x2000u) != 0 && !(VIDEO->small_only >> layer & 1u);
 	uint32_t tile, code;
 	uint8_t byte;
 
@@ -76,15 +85,15 @@ static unsigned layer_pixel(int layer, unsigned x, unsigned y, unsigned *palette
 static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsigned layer_priority)
 {
 	const uint16_t *const regs = cave_board.layer_regs[layer];
-	const int big = (regs[1] & 0x2000u) != 0 && layer != 2;
-	int offs_x = LAYER_OFFS_X;
+	const int big = (regs[1] & 0x2000u) != 0 && !(VIDEO->small_only >> layer & 1u);
+	int offs_x = VIDEO->layer_offs_x;
 	int sx, sy;
 
 	if ((regs[2] & 3u) != layer_priority || (regs[2] & 0x10u))
 		return;
 	offs_x -= big ? (layer + 1) : (layer + 1 + 8);
 	sx = (int)(regs[0] & 0x1FFu) - (int)cave_board.video_regs[0] - offs_x;
-	sy = (int)(regs[1] & 0x1FFu) - (int)cave_board.video_regs[1] - LAYER_OFFS_Y;
+	sy = (int)(regs[1] & 0x1FFu) - (int)cave_board.video_regs[1] - VIDEO->layer_offs_y;
 	for (int y = 0; y < VIDEO_HEIGHT; y++)
 		for (int x = 0; x < VIDEO_WIDTH; x++)
 		{
@@ -93,7 +102,7 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 
 			if (pen == 0 || tile_pri != tile_priority)
 				continue;
-			frame[y * VIDEO_WIDTH + x] = colour(LAYER_COLOR_BASE + palette * 16u + pen);
+			frame[y * VIDEO_WIDTH + x] = colour(VIDEO->layer_colour_base + palette * 16u + pen);
 			priority[y][x] = (uint8_t)(tile_priority + 1u);
 		}
 }
@@ -102,7 +111,7 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 
 static unsigned sprite_pen(uint32_t pixel)
 {
-	const uint8_t byte = rom_set.sprites[(pixel >> 1) & (DONPACHI_SPRITES_SIZE - 1u)];
+	const uint8_t byte = rom_set.sprites[(pixel >> 1) & sprites_mask];
 
 	return (pixel & 1u) ? (byte & 15u) : (byte >> 4);
 }
@@ -110,10 +119,11 @@ static unsigned sprite_pen(uint32_t pixel)
 void video_latch_sprites(void)
 {
 	const unsigned bank = cave_board.video_regs[4] & 3u;
-	const uint16_t *source = &cave_board.sprite_ram[SPRITE_BANK_WORDS * bank];
-	const uint16_t *const finish = source + SPRITE_BANK_WORDS;
+	const uint16_t *source = &cave_board.sprite_ram[VIDEO->sprite_bank_words * bank];
+	const uint16_t *const finish = source + VIDEO->sprite_bank_words;
 	uint32_t clock = 0;
 
+	take_sizes();
 	memset(sprite_layer, 0, sizeof(sprite_layer));
 	for (; source < finish; source += 8)
 	{
@@ -183,14 +193,15 @@ static void draw_sprites(uint32_t *frame)
 
 void video_draw(uint32_t *frame)
 {
-	const uint32_t background = colour(BACKGROUND_PEN);
+	const uint32_t background = colour(VIDEO->background_pen);
 
+	take_sizes();
 	for (int index = 0; index < VIDEO_WIDTH * VIDEO_HEIGHT; index++)
 		frame[index] = background;
 	memset(priority, 0, sizeof(priority));
 	for (unsigned pri = 0; pri <= 3u; pri++)
 		for (unsigned pri2 = 0; pri2 <= 3u; pri2++)
-			for (int layer = 0; layer < 3; layer++)
+			for (int layer = 0; layer < VIDEO->layers; layer++)
 				draw_layer(frame, layer, pri, pri2);
 	draw_sprites(frame);
 }

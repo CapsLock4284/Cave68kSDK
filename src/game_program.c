@@ -16,6 +16,7 @@
 
 #include "cave/machine.h"
 #include "cave/program.h"
+#include "cave/board.h"
 #include "cave/rom_set.h"
 #include "host/tasks.h"
 
@@ -137,7 +138,7 @@ void game_trace_block(uint32_t address)
 const uint8_t *data_at(uint32_t address)
 {
 	address &= 0xFFFFFFu;
-	if (address < DONPACHI_PROGRAM_SIZE)
+	if (address < rom_set_region_size(CAVE_ROM_PROGRAM))
 		return &rom_set.program[address];
 	if (address >= CAVE_WORK_RAM && address < CAVE_WORK_RAM + CAVE_WORK_RAM_SIZE)
 		return cave_work_ram_byte(address);
@@ -157,7 +158,7 @@ const void *data_record(uint32_t address, uint32_t size)
 	address &= 0xFFFFFFu;
 	if (address >= CAVE_WORK_RAM && address + size <= CAVE_WORK_RAM + CAVE_WORK_RAM_SIZE)
 		return cave_work_ram_at(address, size);
-	if (size > RECORD_MAX || address + size > DONPACHI_PROGRAM_SIZE)
+	if (size > RECORD_MAX || address + size > rom_set_region_size(CAVE_ROM_PROGRAM))
 		stopped("the program read a record it cannot have at", address);
 	copy = copies[next++ % RECORD_COPIES];
 	for (uint32_t at = 0; at < size; at++)
@@ -209,10 +210,10 @@ static const char *load_tables(void)
 	for (size_t index = 0; index < *active->table_count; index++)
 	{
 		const game_table *table = &active->tables[index];
-		uint32_t length = DONPACHI_PROGRAM_SIZE - (table->address & 0xFFFFFFu);
+		uint32_t length = rom_set_region_size(CAVE_ROM_PROGRAM) - (table->address & 0xFFFFFFu);
 		uint8_t *copy;
 
-		if ((table->address & 0xFFFFFFu) >= DONPACHI_PROGRAM_SIZE)
+		if ((table->address & 0xFFFFFFu) >= rom_set_region_size(CAVE_ROM_PROGRAM))
 		{
 			snprintf(problem, sizeof(problem), "the program's table %s is outside its ROM", table->name);
 			return problem;
