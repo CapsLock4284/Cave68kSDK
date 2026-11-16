@@ -82,11 +82,12 @@ this are in DonPachi Recomp's `tests/harness`.
 2. **Done:** the board description: bus, ROM set, picture and sound settings taken out of the code and into
    `src/boards/donpachi.c`, with DonPachi unchanged (identical traces).
 3. **Done:** DonPachi Recomp builds against this SDK as its `runtime/` submodule.
-4. **Started:** a second game, DoDonPachi. Its program, translated by DoDonPachi Recomp's tools, boots on the SDK
-   and runs its attract-mode demo. Done: its bus map and ROM set (the program's two chips interleaved; a 64 KB
-   palette), its 8-bit-a-pixel text layer, the interrupt cause's bit 2 as MAME has it, the board's memory addresses
-   per game (`game_board.h`). To do: the other layers' and the sprites' colours and format, the YMZ280B sound
-   chip, the interrupt timing checked, and slowdown checked against MAME.
+4. **Started:** a second game, DoDonPachi. Its program, translated by DoDonPachi Recomp's tools, runs on the SDK:
+   its warning, title and attract demo are drawn right, and over 72,000 VBLANKs of play it matches the original
+   program on MAME's 68000 core at every one of 70,684 game frames: the same board, and the same frames slowed
+   down. Done: its bus map and ROM set, its 8-bit text layer, its palette's banks of 256, its sprites, the interrupt
+   cause's bit 2 as MAME has it, the board's memory addresses per game (`game_board.h`). To do: the YMZ280B sound
+   chip.
 5. More of the family as they are wanted: the 013's zooming sprite format, row-scroll and row-select on the
    layers, flipped screens, other screen sizes (384×240 boards) and four-layer boards.
 

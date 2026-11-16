@@ -123,14 +123,30 @@ void lost_stack(uint32_t address)
 	stopped("the code keeps a stack the C does not have, at", address);
 }
 
+/* A traced build's report (tools/decompile.py --trace: every function and block calls these): each address, a line
+   in game_trace_file while a test sets it (DoDonPachi Recomp's tests/slowdown_check_trace: one frame's blocks, to line
+   up with the original's on MAME's 68000); and with DUMP_AT=ADDR in the environment, the board's memories as the run
+   first comes to ADDR (port_dump.bin). A build without --trace never calls them */
+FILE *game_trace_file;
+
 void game_trace(uint32_t address)
 {
-	(void)address;
+	if (game_trace_file)
+		fprintf(game_trace_file, "%06X\n", (unsigned)address & 0xFFFFFFu);
 }
 
 void game_trace_block(uint32_t address)
 {
-	(void)address;
+	static int dumped;
+
+	if (!game_trace_file)
+		return;
+	if (!dumped && getenv("DUMP_AT") && (address & 0xFFFFFFu) == strtoul(getenv("DUMP_AT"), NULL, 16))
+	{
+		dumped = 1;
+		cave_dump("port_dump.bin");
+	}
+	fprintf(game_trace_file, "%06X\n", (unsigned)address & 0xFFFFFFu);
 }
 
 /* ---- the program's data: the program ROM, or the work RAM where the program set a pointer there ---- */

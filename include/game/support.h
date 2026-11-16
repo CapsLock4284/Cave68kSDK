@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -244,6 +245,7 @@ GAME_NORETURN void lost_stack(uint32_t address);
 
 /* With tools/decompile.py --trace, every function calls game_trace when it starts and every block of code
    game_trace_block: the last ones are shown when the program stops */
+extern FILE *game_trace_file;    /* (where they write; NULL: nowhere) */
 void game_trace(uint32_t address);
 void game_trace_block(uint32_t address);
 
