@@ -17,9 +17,12 @@
  *    The program's chips checked by its reset vector: u27 as the high bytes gives the stack at 110000 and the start
  *    at 0052EA (the World set; 0052F6 the Japanese), the other way round nonsense.
  *
- *    Not checked yet (to be, as the picture and the sound are drawn and played): the layers' offsets and colour
- *    bases, layer 2's 8 bits a pixel, the sprites' format and pixel order, the samples' order (u6 then u7), and
- *    whether 800078 is a watchdog the interrupt writes, as DonPachi's 900078 is.
+ *    Checked by the pictures: layer 2's 8 bits a pixel (MAME's layout_8x8x8: the warning screen reads); the palette's
+ *    banks of 256 (the program fills 00-3F for the sprites, 40-7F for the layers, full banks for layer 2); the
+ *    sprites' ROMs word swapped as DonPachi's (the title's letters read only that way: u50-u53 as they are give
+ *    broken glyphs). The stage backgrounds are sprites (layers 0 and 1 stay empty in the demo).
+ *    Not checked yet: the layers' offsets, the samples' order (u6 then u7), and whether 800078 is a watchdog the
+ *    interrupt writes, as DonPachi's 900078 is.
  */
 #include "cave/boards.h"
 
@@ -84,10 +87,10 @@ static const cave_rom_version ddonpach_versions[] = {
 static const cave_rom_load ddonpach_loads[] = {
 	{ U27, CAVE_ROM_PROGRAM, CAVE_LOAD_EVEN, 0 },
 	{ U26, CAVE_ROM_PROGRAM, CAVE_LOAD_ODD, 0 },
-	{ U50, CAVE_ROM_SPRITES, CAVE_LOAD_PLAIN, 0x000000u },
-	{ U51, CAVE_ROM_SPRITES, CAVE_LOAD_PLAIN, 0x200000u },
-	{ U52, CAVE_ROM_SPRITES, CAVE_LOAD_PLAIN, 0x400000u },
-	{ U53, CAVE_ROM_SPRITES, CAVE_LOAD_PLAIN, 0x600000u },
+	{ U50, CAVE_ROM_SPRITES, CAVE_LOAD_SWAPPED, 0x000000u },
+	{ U51, CAVE_ROM_SPRITES, CAVE_LOAD_SWAPPED, 0x200000u },
+	{ U52, CAVE_ROM_SPRITES, CAVE_LOAD_SWAPPED, 0x400000u },
+	{ U53, CAVE_ROM_SPRITES, CAVE_LOAD_SWAPPED, 0x600000u },
 	{ U60, CAVE_ROM_LAYER0, CAVE_LOAD_PLAIN, 0 },
 	{ U61, CAVE_ROM_LAYER1, CAVE_LOAD_PLAIN, 0 },
 	{ U62, CAVE_ROM_LAYER2, CAVE_LOAD_PLAIN, 0 },
@@ -107,10 +110,13 @@ static const cave_rom_desc ddonpach_roms = {
 static const cave_video_desc ddonpach_video = {
 	3, 1u << 2,                 /* layer 2 (the text): 8x8 tiles only */
 	0x13, -0x12,                /* (DonPachi's: to be checked) */
-	0x400, 0x400 + 63 * 16,     /* (DonPachi's: to be checked) */
+	0x4000, 0x4000 + 63 * 256,  /* the layers' colours from 4000 (the palette's banks 40-7F; the program fills the
+	                               sprites' at 00-3F, and full banks for layer 2's 8-bit tiles) */
 	CAVE_SPRITES_013, 0x2000u,
 	0x8000u,                    /* the palette: C00000-C0FFFF */
 	1u << 2,                    /* layer 2: 8 bits a pixel (u62) */
+	256u,                       /* a colour code a bank of 256 (the sprites' and 4-bit layers' first 16 used) */
+	0,                          /* the sprites' pixels high nibble first (their ROMs word swapped), as DonPachi's */
 };
 
 static const cave_sound_desc ddonpach_sound = {

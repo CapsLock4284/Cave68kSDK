@@ -22,6 +22,12 @@
 #define VIDEO              (cave_board_description->video)
 #define MAX_SPRITE_CLOCK   (448u * 272u * 2u)    /* sprite013: what the chip can draw in a frame */
 
+/* the colours a colour code steps by (cave_video_desc's colour_step) */
+static unsigned colour_step(void)
+{
+	return VIDEO->colour_step ? VIDEO->colour_step : 16u;
+}
+
 /* the graphics' sizes, from the description (taken as each frame is drawn or its sprites latched) */
 static uint32_t layer_tiles[4], sprites_mask;
 
@@ -112,7 +118,7 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 			if (pen == 0 || tile_pri != tile_priority)
 				continue;
 			frame[y * VIDEO_WIDTH + x] = colour(VIDEO->layer_colour_base
-				+ (VIDEO->eight_bits >> layer & 1u ? palette * 256u : palette * 16u) + pen);
+				+ (VIDEO->eight_bits >> layer & 1u ? palette * 256u : palette * colour_step()) + pen);
 			priority[y][x] = (uint8_t)(tile_priority + 1u);
 		}
 }
@@ -123,7 +129,7 @@ static unsigned sprite_pen(uint32_t pixel)
 {
 	const uint8_t byte = rom_set.sprites[(pixel >> 1) & sprites_mask];
 
-	return (pixel & 1u) ? (byte & 15u) : (byte >> 4);
+	return ((pixel & 1u) != 0) != (VIDEO->sprite_low_first != 0) ? (byte & 15u) : (byte >> 4);
 }
 
 void video_latch_sprites(void)
@@ -195,7 +201,7 @@ static void draw_sprites(uint32_t *frame)
 			pri = colpri >> 6 & 3u;
 			if (priority[y][x] <= pri)
 			{
-				frame[y * VIDEO_WIDTH + x] = colour((pixel & 0xFFu) + (colpri & 0x3Fu) * 16u);
+				frame[y * VIDEO_WIDTH + x] = colour((pixel & 0xFFu) + (colpri & 0x3Fu) * colour_step());
 				priority[y][x] = 0xFF;
 			}
 		}

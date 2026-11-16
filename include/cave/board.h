@@ -133,6 +133,11 @@ typedef struct
 	uint32_t palette_words;     /* the palette RAM's words (at most CAVE_PALETTE_WORDS) */
 	uint8_t eight_bits;         /* the layers (bit n: layer n) whose tiles have 8 bits a pixel (a byte each, 64 bytes
 	                               an 8x8 tile), their colour's palettes of 256 */
+	uint16_t colour_step;       /* the colours a colour code steps by, for the sprites and the 4-bit layers: 16
+	                               (DonPachi: 64 palettes of 16), or 256 (DoDonPachi: each code a bank of 256, its first
+	                               16 used); 0 is 16 */
+	uint8_t sprite_low_first;   /* the sprites' ROM bytes hold their two pixels low nibble first (1) or high first
+	                               (0: DonPachi's, its ROMs word swapped) */
 } cave_video_desc;
 
 /* ---- the sound ---- */
