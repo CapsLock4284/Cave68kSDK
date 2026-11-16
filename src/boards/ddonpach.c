@@ -22,8 +22,12 @@
  *    sprites' ROMs word swapped as DonPachi's (the title's letters read only that way: u50-u53 as they are give
  *    broken glyphs). The stage backgrounds are sprites (layers 0 and 1 stay empty in the demo).
  *    The sound: MAME's add_ymz (a YMZ280B at 16.9344 MHz, its interrupt with the VBLANK's on level 1, mono at 1.0).
- *    Not checked yet: the layers' offsets, the samples' order (u6 then u7), and whether 800078 is a watchdog the
- *    interrupt writes, as DonPachi's 900078 is.
+ *    The picture's settings checked against MAME's source: video_start's layer offsets (0x13, -0x12: no kludge for
+ *    this game), the background pen (the layers' last bank, 7F00), init_ddonpach's colour granularity of 256 for the
+ *    4-bit layers, the sprites' "alt" format with granularity 256, and screen_update's priorities (the same code as
+ *    DonPachi's). The dark shapes on the ground are the wrecks of ground enemies (their colours, bank 1F, are dark).
+ *    Not checked yet: the samples' order (u6 then u7), and whether 800078 is a watchdog the interrupt writes, as
+ *    DonPachi's 900078 is.
  */
 #include "cave/boards.h"
 
@@ -110,7 +114,7 @@ static const cave_rom_desc ddonpach_roms = {
 
 static const cave_video_desc ddonpach_video = {
 	3, 1u << 2,                 /* layer 2 (the text): 8x8 tiles only */
-	0x13, -0x12,                /* (DonPachi's: to be checked) */
+	0x13, -0x12,                /* (MAME's video_start, as DonPachi's) */
 	0x4000, 0x4000 + 63 * 256,  /* the layers' colours from 4000 (the palette's banks 40-7F; the program fills the
 	                               sprites' at 00-3F, and full banks for layer 2's 8-bit tiles) */
 	CAVE_SPRITES_013, 0x2000u,

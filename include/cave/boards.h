@@ -19,7 +19,7 @@ extern "C" {
 extern const cave_board_desc cave_board_donpachi;
 
 /* DoDonPachi (Cave, ATC03D2; MAME's ddonpach and ddonpachj): src/boards/ddonpach.c. Its bus, ROM set, picture and
-   sound (a YMZ280B); the picture's layer offsets and priorities still to check */
+   sound (a YMZ280B) */
 extern const cave_board_desc cave_board_ddonpach;
 
 #ifdef __cplusplus

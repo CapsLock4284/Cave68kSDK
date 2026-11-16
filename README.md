@@ -48,7 +48,7 @@ Until a game chooses, the board is DonPachi's.
 | `src/cheats.c`, `src/free_play.c` | MAME-format cheats; free play |
 | `src/inflate.c` | Deflate for .zip reading |
 | `src/boards/donpachi.c` | DonPachi's description (US and Japanese sets) |
-| `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus, ROM set, picture and sound; the layer offsets and priorities still to check |
+| `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus, ROM set, picture and sound |
 
 ## Building
 

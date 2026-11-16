@@ -6,8 +6,9 @@
  *
  *    license:BSD-3-Clause
  *    After MAME (BSD-3-Clause, Luca Elia and others): cave_v.cpp's screen_update and tilemap_draw, sprite013.cpp's
- *    sprites (DonPachi's: the "alt" format, no zoom), tmap038.cpp's tiles. Not yet: the layers' row-scroll and
- *    row-select (DonPachi does not use them, MAME's notes say), flipped layers and sprites.
+ *    sprites (DonPachi's and DoDonPachi's: the "alt" format, no zoom), tmap038.cpp's tiles, and the layers' row-scroll
+ *    and row-select (from each layer's line RAM; the 8x8-only layer has none). Not yet: flipped layers and sprites
+ *    (the games set neither: their screen-flip setting is the cabinet's).
  */
 #include "cave/video.h"
 
@@ -101,6 +102,7 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 {
 	const uint16_t *const regs = cave_board.layer_regs[layer];
 	const int big = (regs[1] & 0x2000u) != 0 && !(VIDEO->small_only >> layer & 1u);
+	const int row_effects = !(VIDEO->small_only >> layer & 1u);    /* (an 8x8-only layer has no line RAM) */
 	int offs_x = VIDEO->layer_offs_x;
 	int sx, sy;
 
@@ -110,10 +112,25 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 	sx = (int)(regs[0] & 0x1FFu) - (int)cave_board.video_regs[0] - offs_x;
 	sy = (int)(regs[1] & 0x1FFu) - (int)cave_board.video_regs[1] - VIDEO->layer_offs_y;
 	for (int y = 0; y < VIDEO_HEIGHT; y++)
+	{
+		/* row-scroll (a line's own x scroll, added) and row-select (the map's line a screen line shows), from the
+		   layer's line RAM (tmap038's lineram, 0x1000 bytes into its RAM: two words a line), read at the line
+		   sy - 1 + y (cave_v.cpp's m_row_effect_offs_n) */
+		int line_x = sx, line_y = y + sy;
+
+		if (row_effects && (regs[0] & 0x4000u || regs[1] & 0x4000u))
+		{
+			const uint16_t *const line = &cave_board.layer_ram[layer][0x800u + ((unsigned)(sy - 1 + y) & 0x1FFu) * 2u];
+
+			if (regs[0] & 0x4000u)
+				line_x += line[0];
+			if (regs[1] & 0x4000u)
+				line_y = line[1];
+		}
 		for (int x = 0; x < VIDEO_WIDTH; x++)
 		{
 			unsigned palette, tile_pri;
-			const unsigned pen = layer_pixel(layer, (unsigned)(x + sx), (unsigned)(y + sy), &palette, &tile_pri);
+			const unsigned pen = layer_pixel(layer, (unsigned)(x + line_x), (unsigned)line_y, &palette, &tile_pri);
 
 			if (pen == 0 || tile_pri != tile_priority)
 				continue;
@@ -121,6 +138,7 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 				+ (VIDEO->eight_bits >> layer & 1u ? palette * 256u : palette * colour_step()) + pen);
 			priority[y][x] = (uint8_t)(tile_priority + 1u);
 		}
+	}
 }
 
 /* ---- the sprites (sprite013, DonPachi's format: 8 words a sprite, no zoom) ---- */
