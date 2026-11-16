@@ -21,6 +21,7 @@
  *    banks of 256 (the program fills 00-3F for the sprites, 40-7F for the layers, full banks for layer 2); the
  *    sprites' ROMs word swapped as DonPachi's (the title's letters read only that way: u50-u53 as they are give
  *    broken glyphs). The stage backgrounds are sprites (layers 0 and 1 stay empty in the demo).
+ *    The sound: MAME's add_ymz (a YMZ280B at 16.9344 MHz, its interrupt with the VBLANK's on level 1, mono at 1.0).
  *    Not checked yet: the layers' offsets, the samples' order (u6 then u7), and whether 800078 is a watchdog the
  *    interrupt writes, as DonPachi's 900078 is.
  */

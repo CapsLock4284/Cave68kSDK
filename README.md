@@ -41,14 +41,14 @@ Until a game chooses, the board is DonPachi's.
 |---|---|
 | `src/machine.c` | the board: the 68000 bus (driven by the description), interrupts, EEPROM (93C46), inputs, the state hash |
 | `src/video.c` | the NEC 038 tile layers, the 013 sprites and the palette, drawn to a 320×240 frame |
-| `src/sound.c` | two OKI M6295s behind an NMK112, resampled and mixed as MAME does, 48 kHz |
+| `src/sound.c` | two OKI M6295s behind an NMK112, or a YMZ280B (its voices, and its interrupt to the 68000 at the sample a voice ends), resampled and mixed as MAME does, 48 kHz |
 | `src/rom_set.c` | the ROM set from a .zip or folder (files known by CRC32, merged and split sets, clones over their parent), and the extracted data file |
 | `src/game_program.c` | the glue between the recompiled program and the board: the frame loop, save states, the program's tasks |
 | `src/tasks.c`, `include/host/tasks.h` | the recompiled program's cooperative tasks |
 | `src/cheats.c`, `src/free_play.c` | MAME-format cheats; free play |
 | `src/inflate.c` | Deflate for .zip reading |
 | `src/boards/donpachi.c` | DonPachi's description (US and Japanese sets) |
-| `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus and ROM set done; picture and sound settings still to check |
+| `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus, ROM set, picture and sound; the layer offsets and priorities still to check |
 
 ## Building
 

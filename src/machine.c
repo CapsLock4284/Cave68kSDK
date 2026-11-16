@@ -144,10 +144,11 @@ static void eeprom_write_lines(uint8_t data)
 
 int cave_irq_level(void)
 {
-	return (cave_board.vblank_irq || cave_board.unknown_irq) ? 1 : 0;
+	return (cave_board.vblank_irq || cave_board.unknown_irq || cave_board.sound.ymz280b.irq_state) ? 1 : 0;
 }
 
 uint64_t (*cave_clock)(void);
+uint64_t (*cave_access_clock)(void);
 
 void cave_vblank_start(void)
 {
@@ -161,7 +162,8 @@ void cave_vblank_start(void)
    900006 the other's (irq_cause_r). Word 0's bit 2 is low for the first 2000 us of each VBLANK (MAME's
    m_agallet_vblank_irq: set by vblank_start, cleared by vblank_end 2000 us later), high after: DoDonPachi's interrupt
    handler reads it after clearing VBLANK's cause (800004, then 800000) and takes the frame's work only while it is
-   low (high: the sound chip's interrupt). DonPachi's handler does not read it */
+   low (high: the sound chip's interrupt; the chip's interrupt in those 2000 us gets the frame's work again). Read at
+   the instruction's start (cave_access_clock). DonPachi's handler does not read it */
 #define AGALLET_CYCLES (CAVE_CPU_CLOCK / 1000000u * 2000u)    /* 2000 us of the 68000: 32,000 cycles */
 static uint16_t irq_cause(uint32_t word)
 {
@@ -175,7 +177,8 @@ static uint16_t irq_cause(uint32_t word)
 		cave_board.vblank_irq = false;
 	if (word == 3)
 		cave_board.unknown_irq = false;
-	if (word == 0 && !(cave_clock && cave_clock() - cave_board.vblank_began < AGALLET_CYCLES))
+	if (word == 0 && !(cave_clock && (cave_access_clock ? cave_access_clock() : cave_clock()) - cave_board.vblank_began
+		< AGALLET_CYCLES))
 		result |= 4u;
 	return result;
 }
@@ -338,7 +341,7 @@ uint16_t cave_read16(uint32_t address, uint16_t mem_mask)
 	case CAVE_REGION_OKI:
 		return cave_sound_status(r->unit);
 	case CAVE_REGION_YMZ280B:
-		return word_in(r, address) & 1u ? cave_sound_ymz_status() : 0u;    /* the M6295's status: bit n, voice n playing */
+		return cave_sound_ymz_read((int)(word_in(r, address) & 1u));    /* (the chip's byte: the low one) */
 	case CAVE_REGION_INPUTS:
 		return r->unit == 0 ? cave_board.in0
 			: (uint16_t)((cave_board.in1 & ~CAVE_EEPROM_DO) | (cave_board.eeprom.out ? CAVE_EEPROM_DO : 0u));

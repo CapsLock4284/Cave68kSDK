@@ -174,10 +174,12 @@ void take_interrupts(void);
    ends: MAME's core); a VBLANK that came after the point is taken after the next instruction. When that is in the
    middle of the program's work, the port has a frame there (the picture as it was) and the program then waits a
    frame more for its own: the arcade's slowdown. m68k_branch: a Bcc or DBcc, whose other way has its own point
-   (plus that way's extra cycles) */
-extern uint64_t m68k_time, m68k_vblank_at;
+   (plus that way's extra cycles). The same for the board's other events (a YMZ280B board's sound chip's interrupt:
+   cave/sound.h): m68k_event_at is the first of them and the VBLANK, and m68k_event_came has those that came by the
+   point 'at' come, in their order, then the program takes the interrupts they raised */
+extern uint64_t m68k_time, m68k_event_at;
 extern uint32_t m68k_extra;
-void m68k_vblank_came(void);
+void m68k_event_came(uint64_t at);
 
 static inline void m68k_cycles(uint32_t cycles)
 {
@@ -191,8 +193,8 @@ static inline void m68k_block(uint32_t cycles, uint32_t point)
 
 	m68k_time += cycles;
 	m68k_extra = 0;
-	if (start + point >= m68k_vblank_at)
-		m68k_vblank_came();
+	if (start + point >= m68k_event_at)
+		m68k_event_came(start + point);
 }
 
 static inline void m68k_branch(uint32_t cycles, uint32_t point, uint32_t other_way)
@@ -202,8 +204,8 @@ static inline void m68k_branch(uint32_t cycles, uint32_t point, uint32_t other_w
 
 	m68k_time += cycles;
 	m68k_extra = 0;
-	if (start + (extra ? other_way + extra : point) >= m68k_vblank_at)
-		m68k_vblank_came();
+	if (start + (extra ? other_way + extra : point) >= m68k_event_at)
+		m68k_event_came(start + (extra ? other_way + extra : point));
 }
 
 /* MOVE to SR, ANDI and ORI to SR: the status register's mode and interrupt mask (its flags are the C's own);

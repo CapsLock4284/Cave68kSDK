@@ -145,8 +145,8 @@ typedef struct
 typedef enum
 {
 	CAVE_SOUND_OKI_NMK112,      /* two OKI M6295s behind an NMK112's banks */
-	CAVE_SOUND_YMZ280B          /* one Yamaha YMZ280B (8 voices of ADPCM or PCM), its samples in CAVE_ROM_SOUND0
-	                               (not played yet: the board is silent) */
+	CAVE_SOUND_YMZ280B          /* one Yamaha YMZ280B (8 voices of ADPCM or PCM), its samples in CAVE_ROM_SOUND0;
+	                               its interrupt is the 68000's level 1, with the VBLANK's (cave/sound.h) */
 } cave_sound_kind;
 
 typedef struct

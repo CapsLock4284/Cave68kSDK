@@ -55,8 +55,10 @@ static jmp_buf restart;            /* (run_program's start, on the game task's o
 static bool reset_pending;
 static bool started;               /* the program has begun (its first frame run): before, a reset is nothing to do */
 
-/* the board's time (game/support.h): the 68000's cycles, and when the next VBLANK comes */
-uint64_t m68k_time = RESET_CYCLES, m68k_vblank_at = FRAME_CYCLES;
+/* the board's time (game/support.h): the 68000's cycles, when the next VBLANK comes, and when the next of the board's
+   events comes (the VBLANK, or a YMZ280B board's sound chip's interrupt: cave_sound_event_at) */
+uint64_t m68k_time = RESET_CYCLES, m68k_event_at = FRAME_CYCLES;
+static uint64_t m68k_vblank_at = FRAME_CYCLES;
 uint32_t m68k_extra;    /* (the data's or a branch's cycles m68k_cycles added to the instruction m68k_block ends) */
 static bool slowdown = true;       /* the port's setting: a VBLANK may come while the program works */
 static bool timed;                 /* the program counts its cycles */
@@ -295,15 +297,32 @@ void return_from_exception(void)
 
 void (*program_after_vblank)(void);
 
+/* the next of the board's events: the VBLANK, or the sound chip's */
+static void schedule(void)
+{
+	const uint64_t sound = cave_sound_event_at();
+
+	m68k_event_at = sound < m68k_vblank_at ? sound : m68k_vblank_at;
+}
+
+/* the sound chip's interrupt or what comes next changed by the program's access: looked at again as the access's
+   instruction ends (its m68k_block) */
+static void sound_events_changed(void)
+{
+	m68k_event_at = 0;
+}
+
 void take_interrupts(void)
 {
 	for (;;)
 	{
 		const int level = cave_irq_level();
+		bool vblank;
 		void (*handler)(void);
 
 		if (level == 0 || (uint32_t)level <= (status >> 8 & 7u))
 			return;
+		vblank = cave_board.vblank_irq;    /* (the VBLANK's, not only the sound chip's) */
 		if (depth == MAX_DEPTH)
 			stopped("too many interrupts nest, at frame end", 0);
 		handler = code_at(data32(4u * (24u + (uint32_t)level)));
@@ -315,9 +334,9 @@ void take_interrupts(void)
 		handler();
 		depth--;
 		status = saved[depth];
-		if (level == 1 && depth == 0)
+		if (level == 1 && depth == 0 && vblank)
 			handled_at = m68k_time;    /* (a wait the program comes to straight after is the one it ended) */
-		if (level == 1 && depth == 0 && program_after_vblank)
+		if (level == 1 && depth == 0 && vblank && program_after_vblank)
 			program_after_vblank();
 	}
 }
@@ -331,23 +350,24 @@ static NOINLINE void restore_state(void);
 static void put_state_back(void);
 
 static void next_frame(void);
+static uint64_t vblank_time;    /* (the VBLANK's own cycle, for next_frame) */
 
 /* The VBLANK came by an instruction's interrupt point (game/support.h's m68k_block): it comes now, at the
    instruction's end, as on the board. The port has the frame; in the middle of the program's work, the picture as it
-   was (the program has not marked a new one ready), and the interrupt is taken here unless the status register
+   was (the program has not marked a new one ready), and the interrupt is taken then unless the status register
    masks it (then as the program lets it through, in take_interrupts): on the board its handler then runs
    the sound and counts the frame and the random index on, and the program, its work done, waits for the VBLANK
    after. With slowdown off, the VBLANK waits for the program instead, as the frame timing has it */
-void m68k_vblank_came(void)
+static void vblank_came(void)
 {
 	bool was_waiting;
 
-	timed = true;
 	if (!slowdown)
 	{
 		m68k_vblank_at = m68k_time + FRAME_CYCLES;
 		return;
 	}
+	vblank_time = m68k_vblank_at;
 	m68k_vblank_at += FRAME_CYCLES;
 	was_waiting = waiting;
 	lagged = !was_waiting;
@@ -357,6 +377,25 @@ void m68k_vblank_came(void)
 		slow_frames++;             /* (it came in the middle of the work: a frame of slowdown) */
 	waiting = false;
 	next_frame();
+}
+
+/* The board's events that came by the point 'at' (the VBLANK, and the sound chip's interrupts: a voice's end, at its
+   sample), in the order they came; then the interrupts they raised are taken, as the instruction ends */
+void m68k_event_came(uint64_t at)
+{
+	timed = true;
+	for (;;)
+	{
+		const uint64_t sound = cave_sound_event_at();
+
+		if (sound <= at && sound < m68k_vblank_at)
+			cave_sound_run_to(sound);
+		else if (m68k_vblank_at <= at)
+			vblank_came();
+		else
+			break;
+	}
+	schedule();
 	take_interrupts();
 }
 
@@ -365,6 +404,7 @@ static void next_frame(void)
 	volatile unsigned char here = 0;
 
 	cave_vblank_start();
+	cave_board.vblank_began = vblank_time;    /* (its own cycle: the instruction it came in may end after it) */
 	stack_bottom = ((uintptr_t)&here - STACK_MARGIN) & ~(uintptr_t)15;
 	if (setjmp(frame_registers) == 0)
 	{
@@ -408,8 +448,9 @@ void frame_wait(void)
 	last_frame_cycles = m68k_time - time_at_wait;
 	if (program_at_wait)
 		program_at_wait();
-	m68k_time = m68k_vblank_at;
+	m68k_time = vblank_time = m68k_vblank_at;
 	m68k_vblank_at += FRAME_CYCLES;
+	schedule();
 	time_at_wait = m68k_time;
 	next_frame();
 }
@@ -418,7 +459,10 @@ void stop(uint32_t value)
 {
 	write_status(value);
 	while (cave_irq_level() == 0 || (uint32_t)cave_irq_level() <= (status >> 8 & 7u))
+	{
+		vblank_time = m68k_time;
 		next_frame();
+	}
 	take_interrupts();
 }
 
@@ -442,6 +486,7 @@ static void reset_board(void)
 	m68k_time = time_at_wait = work_began = handled_at = RESET_CYCLES;
 	m68k_extra = 0;
 	m68k_vblank_at = FRAME_CYCLES;
+	schedule();
 	waiting = lagged = false;
 }
 
@@ -490,10 +535,16 @@ static void run_program(void)
 	stopped("the program came to its end, after", 0);
 }
 
-/* the 68000's time for the sound: where the program's commands to the chips fall in the frame (cave/sound.h) */
+/* the 68000's time for the sound: where the program's commands to the chips fall in the frame (cave/sound.h), and the
+   start of the instruction doing an access (its data's cycles not yet in: the YMZ280B's reads and writes) */
 static uint64_t cycles_now(void)
 {
 	return m68k_time;
+}
+
+static uint64_t instruction_start(void)
+{
+	return m68k_time - m68k_extra;
 }
 
 const char *program_start(void)
@@ -511,12 +562,15 @@ const char *program_start(void)
 	memcpy(cave_board.eeprom.words, rom_set.eeprom, sizeof(cave_board.eeprom.words));
 	cave_reset();
 	cave_sound_clock(cycles_now, FRAME_CYCLES);
+	cave_sound_events_changed = sound_events_changed;
+	cave_access_clock = instruction_start;
 	status = 0x2700u;
 	depth = 0;
 	interrupts = 0;
 	m68k_time = time_at_wait = work_began = handled_at = RESET_CYCLES;
 	m68k_extra = 0;
 	m68k_vblank_at = FRAME_CYCLES;
+	schedule();
 	slow_frames = 0;
 	waiting = false;
 	port_task = host_task_main();
@@ -576,6 +630,7 @@ void program_state_load(const program_state *state)
 	interrupts = state->interrupts;
 	m68k_time = time_at_wait = state->time;
 	m68k_vblank_at = state->vblank_at;
+	schedule();
 	slow_frames = state->slow_frames;
 	work_began = state->work_began;
 	handled_at = state->handled_at;

@@ -1,7 +1,9 @@
 /**
  *    Name:        sound.h
- *    Description: DonPachi's sound: two OKI M6295 ADPCM chips (the music on #0, the effects on #1) behind an NMK112,
- *                 which banks the sample ROMs in 64 KB pages; the 68000 drives all three itself
+ *    Description: the boards' sound. DonPachi's: two OKI M6295 ADPCM chips (the music on #0, the effects on #1)
+ *                 behind an NMK112, which banks the sample ROMs in 64 KB pages; the 68000 drives all three itself.
+ *                 DoDonPachi's: a YMZ280B (8 voices of ADPCM or PCM, 4 MB of samples), whose interrupt tells the
+ *                 68000 a voice has ended
  *    Version:     0.1.0 (draft)
  *    Created:     09-11-2026
  *
@@ -22,6 +24,13 @@
  *    The output as MAME makes it by default (src/emu/sound.cpp, resampler.cpp, audio_effects/filter.cpp): each
  *    chip's samples to 48 kHz by its "LoFi" resampler (a 4-point interpolation, after Yamaha's), mixed at their
  *    gains, through the speaker's high-pass filter at 20 Hz, then to 16 bits.
+ *
+ *    The YMZ280B after MAME's src/devices/sound/ymz280b.cpp (BSD-3-Clause, Aaron Giles) and the ddonpach machine of
+ *    cave.cpp: 16.9344 MHz, its samples at 88,200 Hz (both outputs to the mono speaker at 1.0), its interrupt merged
+ *    with the VBLANK's on the 68000's level 1. It runs by the 68000's clock (cave_sound_run_to), and a voice's end
+ *    interrupts at its own sample: DoDonPachi's interrupt handler tells the two apart by the time (the cause's bit 2,
+ *    low for 2000 us from the VBLANK: cave/machine.h), so when the chip's interrupt comes is part of the game's timing
+ *    and its slowdown, and the decompiled program and MAME's 68000 (tools/cref) take it at the same cycle.
  */
 #ifndef CAVE_SOUND_H
 #define CAVE_SOUND_H
@@ -57,13 +66,38 @@ typedef struct
 	int32_t samples[CAVE_SOUND_FRAME_MOST];
 } cave_oki;
 
+/* A YMZ280B's voice: MAME's YMZ280BVoice (its timer left out: a voice ends at the chip's sample that reads its stop) */
+typedef struct
+{
+	uint8_t playing, keyon, looping, mode;
+	uint16_t fnum;
+	uint8_t level, pan;
+	uint32_t start, stop, loop_start, loop_end;    /* in nibbles */
+	uint32_t position;
+	int32_t signal, step, loop_signal, loop_step;
+	uint32_t loop_count;
+	int32_t output_left, output_right, output_step, output_pos;
+	int16_t last_sample, curr_sample;
+} cave_ymz_voice;
+
+typedef struct
+{
+	cave_ymz_voice voice[8];
+	uint8_t current_register, status, irq_state, irq_mask, irq_enable, keyon_enable, ext_mem_enable, ext_readlatch;
+	uint32_t ext_mem_address, ext_mem_address_hi, ext_mem_address_mid;
+	uint64_t samples;     /* the chip's samples (88,200 a second) made since the board's reset */
+	uint64_t check;       /* the first of its samples a voice whose end interrupts can end at (UINT64_MAX: none) */
+	uint64_t outputs;     /* the output's samples made of them since the reset */
+} cave_ymz;
+
 typedef struct
 {
 	cave_oki oki[2];
 	uint8_t bank[8];      /* the NMK112: chip #0's 4 banks of 64 KB, then #1's */
-	uint8_t ymz_register; /* a YMZ280B board's: the register the program chose, and what it wrote to each (the chip
-	                         is not played yet) */
+	uint8_t ymz_register; /* a YMZ280B board's: the register the program last chose, and the last value it wrote to
+	                         each (for the test tools) */
 	uint8_t ymz[256];
+	cave_ymz ymz280b;     /* a YMZ280B board's chip */
 	bool frame_begun;     /* (the frame's samples counted: 'due') */
 	uint64_t frame_began; /* the 68000's time as the frame began (cave_sound_clock's cycles) */
 } cave_sound;
@@ -73,10 +107,31 @@ uint8_t cave_sound_status(int chip);
 void cave_sound_command(int chip, uint8_t data);
 void cave_sound_bank(int which, uint8_t data);
 
-/* A YMZ280B board's: its status (bit n: voice n ended; not played yet, so 0), and a write: 'port' 0 chooses the
-   register, 1 writes it */
-uint8_t cave_sound_ymz_status(void);
+/* A YMZ280B board's chip on the bus (its byte at 300001 and 300003 on DoDonPachi's): a read of 'port' 1 is its status
+   (bit n: voice n ended), which the read clears with its interrupt; of port 0, the sample ROM's byte it was set to
+   read back. A write to port 0 chooses the register, to port 1 writes it. Both bring the chip up to the 68000's time
+   first (cave_access_clock, cave/machine.h), as MAME's stream update does */
+uint8_t cave_sound_ymz_read(int port);
 void cave_sound_ymz_write(int port, uint8_t data);
+
+/* A YMZ280B board's time. The chip makes its samples by the 68000's clock: sample n at 68000 cycle n * 80000 / 441
+   from the board's reset (16 MHz / (16.9344 MHz / 384 * 2)). A voice that comes to its stop address ends at the
+   sample that reads it: its bit in the status, and the chip's interrupt (level 1, with the VBLANK's) if the program
+   lets it through, as the board's chip does at that moment (MAME finds it at its next stream update instead, up to a
+   frame late). cave_sound_event_at: the 68000's cycle by which the chip's interrupt may next come (UINT64_MAX: none
+   can); cave_sound_run_to: the chip brought up to the 68000's cycle 'cycles'. The program's runtime (or the reference
+   tools) calls it at that cycle, and has the interrupt taken then. cave_sound_events_changed, when set, is called when
+   a write or a read changes when the next may come, or the interrupt's line: the runtime looks again */
+uint64_t cave_sound_event_at(void);
+void cave_sound_run_to(uint64_t cycles);
+
+/* Whether the chip's interrupt is up by the 68000's cycle 'cycles', the chip left where it is (a copy of it run
+   there). For MAME's 68000 (tools/cref), stopped at the event's cycle part way into an instruction: the line goes up
+   there, and the chip is brought there as the next instruction begins, after that instruction's accesses, as the
+   decompiled program has them (the event at the instruction's end) */
+bool cave_sound_irq_at(uint64_t cycles);
+extern void (*cave_sound_events_changed)(void);
+
 
 /* The chips after the board's reset: silent, no command waiting */
 void cave_sound_reset(void);

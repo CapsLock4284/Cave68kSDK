@@ -15,6 +15,7 @@ sound code follow these files (each source file names the parts it follows and t
 - `src/devices/sound/okim6295.cpp` (Mirko Buffoni, Aaron Giles), `okiadpcm.cpp` (Andrew Gardner, Aaron
   Giles): the M6295 and its ADPCM
 - `src/devices/machine/nmk112.cpp` (Alex W. Jackson): the NMK112
+- `src/devices/sound/ymz280b.cpp` (Aaron Giles): the YMZ280B
 - `src/emu/sound.cpp`, `resampler.cpp`, `audio_effects/filter.cpp`: the resampler and the output filter
 
 ## tmntarcade-decomp

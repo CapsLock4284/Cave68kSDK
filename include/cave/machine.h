@@ -76,7 +76,8 @@ typedef struct
 	uint16_t palette[CAVE_PALETTE_WORDS];
 	bool vblank_irq;                          /* raised when VBLANK starts, cleared by reading 900004 */
 	bool unknown_irq;
-	uint64_t vblank_began;                    /* the 68000's time (cave_clock's cycles) as the last VBLANK began */
+	uint64_t vblank_began;                    /* the 68000's time (cave_clock's cycles) as the last VBLANK began (the
+	                                             program's runtime sets the VBLANK's own cycle after cave_vblank_start) */
 	cave_sound sound;                         /* the M6295s and the NMK112 (cave/sound.h) */
 	uint8_t eeprom_lines;                     /* the last byte written to D00000 */
 	cave_eeprom eeprom;
@@ -108,11 +109,19 @@ void cave_reset(void);
 uint16_t cave_read16(uint32_t address, uint16_t mem_mask);
 void cave_write16(uint32_t address, uint16_t data, uint16_t mem_mask);
 
-/* The interrupt level the 68000 sees: 1 while an interrupt is pending, else 0 */
+/* The interrupt level the 68000 sees: 1 while an interrupt is pending (the VBLANK's, or a YMZ280B board's sound chip's:
+   cave/sound.h), else 0 */
 int cave_irq_level(void);
 
 /* The 68000's time in cycles, from the port's program (cave_sound_clock sets it): NULL until then */
 extern uint64_t (*cave_clock)(void);
+
+/* The 68000's time as the instruction doing a bus access began (NULL: cave_clock), for what the board answers by the
+   time: the interrupt cause's bit 2 and a YMZ280B's samples. The decompiled program has the time of an instruction's
+   start only (its cycles counted at its end); MAME's 68000 (tools/cref) is part way into the instruction by its
+   access, and gives the instruction's start here, so that both see the board alike (MAME's own board reads its
+   timers at the access: a few cycles later) */
+extern uint64_t (*cave_access_clock)(void);
 
 /* The screen's VBLANK begins: the interrupt, and the frame's sound (cave_sound_frame) */
 void cave_vblank_start(void);
