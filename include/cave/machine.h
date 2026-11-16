@@ -76,6 +76,7 @@ typedef struct
 	uint16_t palette[CAVE_PALETTE_WORDS];
 	bool vblank_irq;                          /* raised when VBLANK starts, cleared by reading 900004 */
 	bool unknown_irq;
+	uint64_t vblank_began;                    /* the 68000's time (cave_clock's cycles) as the last VBLANK began */
 	cave_sound sound;                         /* the M6295s and the NMK112 (cave/sound.h) */
 	uint8_t eeprom_lines;                     /* the last byte written to D00000 */
 	cave_eeprom eeprom;
@@ -109,6 +110,9 @@ void cave_write16(uint32_t address, uint16_t data, uint16_t mem_mask);
 
 /* The interrupt level the 68000 sees: 1 while an interrupt is pending, else 0 */
 int cave_irq_level(void);
+
+/* The 68000's time in cycles, from the port's program (cave_sound_clock sets it): NULL until then */
+extern uint64_t (*cave_clock)(void);
 
 /* The screen's VBLANK begins: the interrupt, and the frame's sound (cave_sound_frame) */
 void cave_vblank_start(void);

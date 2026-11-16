@@ -28,7 +28,7 @@ static uint32_t layer_tiles[4], sprites_mask;
 static void take_sizes(void)
 {
 	for (int layer = 0; layer < 4; layer++)
-		layer_tiles[layer] = rom_set_region_size(CAVE_ROM_LAYER0 + layer) / 32u;
+		layer_tiles[layer] = rom_set_region_size(CAVE_ROM_LAYER0 + layer) / (VIDEO->eight_bits >> layer & 1u ? 64u : 32u);
 	sprites_mask = rom_set_region_size(CAVE_ROM_SPRITES) - 1u;
 }
 
@@ -77,6 +77,15 @@ static unsigned layer_pixel(int layer, unsigned x, unsigned y, unsigned *palette
 	*palette_out = tile >> 24 & 0x3Fu;
 	*priority_out = tile >> 30;
 	code %= tiles;
+	if (VIDEO->eight_bits >> layer & 1u)
+	{
+		/* (MAME's layout_8x8x8: planes 8-11 then 0-3, the pixels' x at bits 0, 4, 16, 20, 32, 36, 48, 52 of a row
+		   of 64: a pixel's low nibble in one byte, its high nibble in the next, x even the bytes' high nibbles) */
+		const uint8_t *const pair = &gfx[code * 64u + (y & 7u) * 8u + ((x & 7u) >> 1) * 2u];
+		const unsigned shift = (x & 1u) ? 0u : 4u;
+
+		return (unsigned)((pair[1] >> shift & 15u) << 4 | (pair[0] >> shift & 15u));
+	}
 	byte = gfx[code * 32u + (y & 7u) * 4u + ((x & 7u) >> 1)];
 	return (x & 1u) ? (byte & 15u) : (byte >> 4);
 }
@@ -102,7 +111,8 @@ static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsig
 
 			if (pen == 0 || tile_pri != tile_priority)
 				continue;
-			frame[y * VIDEO_WIDTH + x] = colour(VIDEO->layer_colour_base + palette * 16u + pen);
+			frame[y * VIDEO_WIDTH + x] = colour(VIDEO->layer_colour_base
+				+ (VIDEO->eight_bits >> layer & 1u ? palette * 256u : palette * 16u) + pen);
 			priority[y][x] = (uint8_t)(tile_priority + 1u);
 		}
 }

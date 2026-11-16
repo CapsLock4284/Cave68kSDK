@@ -140,6 +140,7 @@ void cave_sound_clock(uint64_t (*cycles_now)(void), uint64_t frame_cycles)
 {
 	clock_now = cycles_now;
 	clock_frame = frame_cycles;
+	cave_clock = cycles_now;
 }
 
 /* the frame's samples counted (the chip's clock over 132, kept exact from frame to frame), none made yet */

@@ -131,6 +131,8 @@ typedef struct
 	cave_sprite_format sprites;
 	uint32_t sprite_bank_words; /* a bank of the sprite RAM (the program shows one by video register 4) */
 	uint32_t palette_words;     /* the palette RAM's words (at most CAVE_PALETTE_WORDS) */
+	uint8_t eight_bits;         /* the layers (bit n: layer n) whose tiles have 8 bits a pixel (a byte each, 64 bytes
+	                               an 8x8 tile), their colour's palettes of 256 */
 } cave_video_desc;
 
 /* ---- the sound ---- */

@@ -147,15 +147,22 @@ int cave_irq_level(void)
 	return (cave_board.vblank_irq || cave_board.unknown_irq) ? 1 : 0;
 }
 
+uint64_t (*cave_clock)(void);
+
 void cave_vblank_start(void)
 {
 	cave_board.vblank_irq = true;
+	cave_board.vblank_began = cave_clock ? cave_clock() : 0u;
 	cave_board.frame++;
 	cave_sound_frame();
 }
 
 /* 900000-900007: the cause, bit 0 low for VBLANK, bit 1 low for the other; reading 900004 clears VBLANK's,
-   900006 the other's (irq_cause_r) */
+   900006 the other's (irq_cause_r). Word 0's bit 2 is low for the first 2000 us of each VBLANK (MAME's
+   m_agallet_vblank_irq: set by vblank_start, cleared by vblank_end 2000 us later), high after: DoDonPachi's interrupt
+   handler reads it after clearing VBLANK's cause (800004, then 800000) and takes the frame's work only while it is
+   low (high: the sound chip's interrupt). DonPachi's handler does not read it */
+#define AGALLET_CYCLES (CAVE_CPU_CLOCK / 1000000u * 2000u)    /* 2000 us of the 68000: 32,000 cycles */
 static uint16_t irq_cause(uint32_t word)
 {
 	uint16_t result = 0x0003u;
@@ -168,8 +175,8 @@ static uint16_t irq_cause(uint32_t word)
 		cave_board.vblank_irq = false;
 	if (word == 3)
 		cave_board.unknown_irq = false;
-	if (word == 0)
-		result |= 4u;    /* (bit 2: agallet's, idle here) */
+	if (word == 0 && !(cave_clock && cave_clock() - cave_board.vblank_began < AGALLET_CYCLES))
+		result |= 4u;
 	return result;
 }
 

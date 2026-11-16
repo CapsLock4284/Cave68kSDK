@@ -125,13 +125,30 @@ extern const size_t game_table_count;
 #define LINKED(base, link) (((base) & 0xFFFF0000u) | (link))
 #define IN_PAGE(base, low) (((base) & ~0xFFu) | (low))
 
-/* ---- the board's memories (addresses the code computes into them) ---- */
+/* ---- the board's memories (addresses the code computes into them) ----
+   Each game's are its own (its profile's REGIONS): a game's build puts a game_board.h on its include path with its
+   addresses (DoDonPachi's: PALETTE_RAM 0xC00000u...); without one, DonPachi's */
 
+#if defined(__has_include)
+#if __has_include("game_board.h")
+#include "game_board.h"
+#endif
+#endif
+#ifndef PALETTE_RAM
 #define PALETTE_RAM 0xA08000u
+#endif
+#ifndef SPRITE_RAM
 #define SPRITE_RAM  0x500000u
+#endif
+#ifndef LAYER0_RAM
 #define LAYER0_RAM  0x300000u
+#endif
+#ifndef LAYER1_RAM
 #define LAYER1_RAM  0x200000u
+#endif
+#ifndef LAYER2_RAM
 #define LAYER2_RAM  0x400000u
+#endif
 
 /* A register of a device of the board, by its name: the bus hands it the read or the write */
 #define io_read8(address)          mem_read8(address)

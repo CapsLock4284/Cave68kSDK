@@ -110,6 +110,7 @@ static const cave_video_desc ddonpach_video = {
 	0x400, 0x400 + 63 * 16,     /* (DonPachi's: to be checked) */
 	CAVE_SPRITES_013, 0x2000u,
 	0x8000u,                    /* the palette: C00000-C0FFFF */
+	1u << 2,                    /* layer 2: 8 bits a pixel (u62) */
 };
 
 static const cave_sound_desc ddonpach_sound = {
