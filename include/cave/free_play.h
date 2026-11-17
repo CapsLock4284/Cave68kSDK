@@ -1,8 +1,9 @@
 /**
  *    Name:        free_play.h
- *    Description: free play for home: Start drops in the coins a game needs first. DonPachi has no free play setting
- *                 (its test mode's coin settings go from 1 coin 1 play to 4 coins 1 play), so the port plays the
- *                 coins in: only the inputs change, the game runs as it does on the board (coin sound, credit, start)
+ *    Description: free play for home: Start drops in the coins a game needs first. DonPachi and DoDonPachi have no free
+ *                 play setting (their test modes' coin settings start at 1 coin 1 play), so the port plays the coins
+ *                 in: only the inputs change, the game runs as it does on the board (coin sound, credit, start). Where
+ *                 each game keeps its credits: its board description (cave_credits_desc: cave/board.h)
  *    Version:     0.1.0 (draft)
  *    Created:     09-11-2026
  *

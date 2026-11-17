@@ -131,6 +131,12 @@ static const cave_sound_desc ddonpach_sound = {
 	0, 0,
 };
 
+/* The credits: the word at $1013AA (a coin adds to it, at most 9; a start takes); bit 0 of $101297, the test
+   mode's DISCOUNT CONTINUE (configuration 1, from the EEPROM), makes a game take 2 credits (the start's check in
+   004B70, the title's "2COINS TO START" in 003C48). A continue then takes 1: free play drops 2 for it, 1 left over */
+static const cave_credits_desc ddonpach_credits = { 0x1013AAu, 0x101297u, 0 };
+
 const cave_board_desc cave_board_ddonpach = {
-	"ddonpach", ddonpach_map, COUNT(ddonpach_map), &ddonpach_roms, &ddonpach_video, &ddonpach_sound
+	"ddonpach", ddonpach_map, COUNT(ddonpach_map), &ddonpach_roms, &ddonpach_video, &ddonpach_sound,
+	&ddonpach_credits
 };

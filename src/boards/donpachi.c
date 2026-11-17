@@ -112,6 +112,12 @@ static const cave_sound_desc donpachi_sound = {
 	0x040000u, 1u << 1,
 };
 
+/* The credits: the word at $10139A (the coin routine at 00CBDA adds to it; MAME's "Infinite Credits" cheat writes
+   it); bit 0 of $101287, the test mode's coin setting read from the EEPROM at 034488, makes a game take 2 credits
+   (034746) */
+static const cave_credits_desc donpachi_credits = { 0x10139Au, 0x101287u, 0 };
+
 const cave_board_desc cave_board_donpachi = {
-	"donpachi", donpachi_map, COUNT(donpachi_map), &donpachi_roms, &donpachi_video, &donpachi_sound
+	"donpachi", donpachi_map, COUNT(donpachi_map), &donpachi_roms, &donpachi_video, &donpachi_sound,
+	&donpachi_credits
 };

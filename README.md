@@ -23,6 +23,7 @@ the sprite format, the sound chips and the ROM files. Each game gets a **board d
 | ROM set | `cave_rom_desc` | the versions (MAME's sets, parent and clones), their files by name, CRC32 and size, and where each file is loaded (as is, byte-swapped, or interleaved into even and odd bytes) |
 | Picture | `cave_video_desc` | the number of layers, which are 8×8 only, the layer offsets, colour bases, sprite format and sprite bank size |
 | Sound | `cave_sound_desc` | the chip kind, clocks, divisor, mix levels and NMK112 layout |
+| Credits | `cave_credits_desc` | where the program counts its credits and the setting that makes a game take 2, for free play (`free_play.c`: Start drops in the coins first) |
 
 The descriptions live in `src/boards/`, one file per game, and are listed in `include/cave/boards.h`.
 A game chooses its board before its reset:
@@ -45,7 +46,7 @@ Until a game chooses, the board is DonPachi's.
 | `src/rom_set.c` | the ROM set from a .zip or folder (files known by CRC32, merged and split sets, clones over their parent), and the extracted data file |
 | `src/game_program.c` | the glue between the recompiled program and the board: the frame loop, save states, the program's tasks |
 | `src/tasks.c`, `include/host/tasks.h` | the recompiled program's cooperative tasks |
-| `src/cheats.c`, `src/free_play.c` | MAME-format cheats; free play |
+| `src/cheats.c`, `src/free_play.c` | MAME-format cheats; free play (Start drops in the coins a game needs, then presses Start until the game takes it) |
 | `src/inflate.c` | Deflate for .zip reading |
 | `src/boards/donpachi.c` | DonPachi's description (US and Japanese sets) |
 | `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus, ROM set, picture and sound |

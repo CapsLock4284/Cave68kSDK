@@ -159,6 +159,16 @@ typedef struct
 	uint8_t paged_table;        /* the chips (bit n: chip n) whose sample table the NMK112 pages too */
 } cave_sound_desc;
 
+/* ---- the game's credits (cave/free_play.h) ---- */
+
+typedef struct
+{
+	uint32_t credits;           /* the work RAM word the game counts its credits in (a coin adds, a start takes) */
+	uint32_t two_credits;       /* the byte whose bit 'two_credits_bit' set makes a game take 2 credits (the test
+	                               mode's setting, read from the EEPROM), clear 1 */
+	uint8_t two_credits_bit;
+} cave_credits_desc;
+
 typedef struct
 {
 	const char *name;           /* MAME's machine name ("donpachi") */
@@ -167,6 +177,7 @@ typedef struct
 	const cave_rom_desc *roms;
 	const cave_video_desc *video;
 	const cave_sound_desc *sound;
+	const cave_credits_desc *credits;    /* the program's credits, for free play (NULL: free play does nothing) */
 } cave_board_desc;
 
 /* The board being run: its description (DonPachi's until a game chooses its own). Set it before cave_reset */
