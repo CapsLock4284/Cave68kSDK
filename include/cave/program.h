@@ -73,7 +73,9 @@ extern void (*program_after_vblank)(void);
    where it waits for its frame. program_state_save takes one between frames (program_run_frame has returned): NULL
    if there is no memory. program_state_load puts one back; the next program_run_frame goes on from it, as the
    frame after the one it was saved at. The port draws the picture again (video_latch_sprites, video_draw) and drops
-   the sound it had queued */
+   the sound it had queued. A state saved and loaded around a frame run on (cave_sound_quiet set) leaves the program
+   exactly as it was: the look-ahead picture, a frame's picture shown as its VBLANK comes (the next interrupt's
+   scroll and palette in it) rather than a frame later */
 typedef struct program_state program_state;
 
 program_state *program_state_save(void);
@@ -83,8 +85,9 @@ void program_state_free(program_state *state);
 /* The frames so far, and the interrupts the program took */
 uint64_t program_frames(void);
 uint64_t program_frames_since_reset(void);    /* the frames since the board's last reset (or its start) */
-bool program_change_pending(void);    /* a reset or a save state asked for, taking effect at the next frame: nothing
-                                         may save or load a state before it (program_state_load would drop it) */
+bool program_change_pending(void);    /* a reset or a save state asked for, taking effect at the next frame: no
+                                         state may be loaded before a reset does (program_state_load would drop it);
+                                         one saved meanwhile is the state loaded, as the next frame would go on */
 uint32_t program_interrupts(void);
 
 #ifdef __cplusplus

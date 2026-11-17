@@ -34,8 +34,6 @@ enum
 
 enum { OP_READ = 2, OP_WRITE = 1, OP_ERASE = 3, OP_EXTENDED = 0 };
 
-static int eeprom_pending_op;     /* the write or erase CS's fall carries out: 1 WRITE, 3 ERASE, 4 ERAL, 5 WRAL */
-static uint16_t eeprom_data;
 
 static void eeprom_clock_rising(cave_eeprom *e)
 {
@@ -62,37 +60,37 @@ static void eeprom_clock_rising(cave_eeprom *e)
 			{
 				e->state = EEPROM_READ;
 				e->out = false;          /* the dummy 0 before the data */
-				eeprom_data = e->words[e->address];
+				e->data = e->words[e->address];
 			}
 			else if (op == OP_WRITE)
 			{
 				e->state = EEPROM_WRITE_DATA;
-				eeprom_pending_op = 1;
+				e->pending_op = 1;
 			}
 			else if (op == OP_ERASE)
 			{
 				e->state = EEPROM_DONE;
-				eeprom_pending_op = 3;
+				e->pending_op = 3;
 			}
 			else
 				switch (e->address >> 4)
 				{
 				case 3: e->write_enabled = true; e->state = EEPROM_IDLE; break;     /* EWEN */
 				case 0: e->write_enabled = false; e->state = EEPROM_IDLE; break;    /* EWDS */
-				case 2: e->state = EEPROM_DONE; eeprom_pending_op = 4; break;       /* ERAL */
-				default: e->state = EEPROM_WRITE_DATA; eeprom_pending_op = 5; break; /* WRAL */
+				case 2: e->state = EEPROM_DONE; e->pending_op = 4; break;       /* ERAL */
+				default: e->state = EEPROM_WRITE_DATA; e->pending_op = 5; break; /* WRAL */
 				}
 		}
 		break;
 	case EEPROM_READ:
-		e->out = (eeprom_data & 0x8000u) != 0;
-		eeprom_data = (uint16_t)(eeprom_data << 1);
+		e->out = (e->data & 0x8000u) != 0;
+		e->data = (uint16_t)(e->data << 1);
 		if (++e->bits == 16)
 		{
 			/* (a longer read goes on with the next word) */
 			e->bits = 0;
 			e->address = (e->address + 1) & (int)(CAVE_EEPROM_WORDS - 1u);
-			eeprom_data = e->words[e->address];
+			e->data = e->words[e->address];
 		}
 		break;
 	case EEPROM_WRITE_DATA:
@@ -108,7 +106,7 @@ static void eeprom_clock_rising(cave_eeprom *e)
 static void eeprom_select_falling(cave_eeprom *e)
 {
 	if (e->state == EEPROM_DONE && e->write_enabled)
-		switch (eeprom_pending_op)
+		switch (e->pending_op)
 		{
 		case 1: e->words[e->address] = (uint16_t)e->shift; break;
 		case 3: e->words[e->address] = 0xFFFFu; break;
@@ -116,7 +114,7 @@ static void eeprom_select_falling(cave_eeprom *e)
 		case 5: for (int i = 0; i < (int)CAVE_EEPROM_WORDS; i++) e->words[i] = (uint16_t)e->shift; break;
 		default: break;
 		}
-	eeprom_pending_op = 0;
+	e->pending_op = 0;
 	e->state = EEPROM_IDLE;
 	e->out = true;    /* ready */
 }

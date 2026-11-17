@@ -143,6 +143,12 @@ void cave_sound_frame(void);
    being 'frame_cycles' of them. NULL (as it starts): every command from its frame's start */
 void cave_sound_clock(uint64_t (*cycles_now)(void), uint64_t frame_cycles);
 
+/* While set, cave_sound_frame makes nothing and leaves the output's own state (its resampler's and filter's history,
+   kept outside the board) as it is: for a frame the port runs and then throws away, with a save state put back after
+   it (the look-ahead picture: one frame run on to draw the picture its vblank interrupt sets, then back). The chips'
+   own state is the board's, put back with the save state */
+extern bool cave_sound_quiet;
+
 /* The samples made so far and not yet taken, at most 'most' of them into 'out': how many. The output keeps about
    0.7 s; what a port does not take in time is dropped, the oldest first */
 unsigned cave_sound_take(int16_t *out, unsigned most);

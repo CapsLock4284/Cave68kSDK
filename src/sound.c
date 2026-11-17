@@ -882,10 +882,14 @@ static void ymz_frame(void)
 		output_mixed((float)SOUND->gain[0] * ymz_lofi(chip->outputs++));
 }
 
+bool cave_sound_quiet;
+
 void cave_sound_frame(void)
 {
 	unsigned outputs;
 
+	if (cave_sound_quiet)
+		return;    /* (a frame run to be thrown away: the output's own state left as it is) */
 	if (ymz_board())
 	{
 		ymz_frame();

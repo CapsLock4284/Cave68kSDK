@@ -64,6 +64,8 @@ typedef struct
 	int bits;
 	int state;
 	int address;
+	int pending_op;             /* the write or erase CS's fall carries out: 1 WRITE, 3 ERASE, 4 ERAL, 5 WRAL */
+	uint16_t data;              /* the word being read out */
 } cave_eeprom;
 
 typedef struct

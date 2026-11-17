@@ -98,8 +98,9 @@ struct program_state
 	uint32_t saved[MAX_DEPTH];
 	size_t depth;
 	uint32_t interrupts;
-	uint64_t time, vblank_at, slow_frames, work_began, handled_at;
-	bool waiting;
+	uint64_t time, vblank_at, slow_frames, work_began, handled_at, time_at_wait, last_frame_cycles;
+	bool waiting, timed;    /* (timed: the program has counted its cycles yet; it has not in its first frames, as it
+	                           starts: a state from then put back after a frame that has must not be taken as timed) */
 	jmp_buf registers;
 	uintptr_t bottom, top;
 	size_t stack_size;
@@ -594,7 +595,11 @@ void program_run_frame(void)
 
 program_state *program_state_save(void)
 {
-	const size_t size = stack_top > stack_bottom ? (size_t)(stack_top - stack_bottom) : 0;
+	/* (a state loaded, not yet put back: the program goes on from its stack, not from the one the game task last left,
+	   so that is the one kept: a save straight after a load, or the port's look-ahead picture, which puts its state
+	   back after each frame it runs on) */
+	const program_state *const pending = state_pending;
+	const size_t size = pending ? pending->stack_size : stack_top > stack_bottom ? (size_t)(stack_top - stack_bottom) : 0;
 	program_state *state;
 
 	if (!size || !(state = malloc(sizeof(*state) + size)))
@@ -609,7 +614,19 @@ program_state *program_state_save(void)
 	state->slow_frames = slow_frames;
 	state->work_began = work_began;
 	state->handled_at = handled_at;
+	state->time_at_wait = time_at_wait;
+	state->last_frame_cycles = last_frame_cycles;
 	state->waiting = waiting;
+	state->timed = timed;
+	if (pending)
+	{
+		memcpy(state->registers, pending->registers, sizeof(jmp_buf));
+		state->bottom = pending->bottom;
+		state->top = pending->top;
+		state->stack_size = size;
+		memcpy(state->stack, pending->stack, size);
+		return state;
+	}
 	memcpy(state->registers, frame_registers, sizeof(jmp_buf));
 	state->bottom = stack_bottom;
 	state->top = stack_top;
@@ -628,7 +645,10 @@ void program_state_load(const program_state *state)
 	memcpy(saved, state->saved, sizeof(saved));
 	depth = state->depth;
 	interrupts = state->interrupts;
-	m68k_time = time_at_wait = state->time;
+	m68k_time = state->time;
+	time_at_wait = state->time_at_wait;
+	last_frame_cycles = state->last_frame_cycles;
+	timed = state->timed;
 	m68k_vblank_at = state->vblank_at;
 	schedule();
 	slow_frames = state->slow_frames;
