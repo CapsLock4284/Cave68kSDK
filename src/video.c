@@ -9,6 +9,9 @@
  *    sprites (DonPachi's and DoDonPachi's: the "alt" format, no zoom), tmap038.cpp's tiles, and the layers' row-scroll
  *    and row-select (from each layer's line RAM; the 8x8-only layer has none). Not yet: flipped layers and sprites
  *    (the games set neither: their screen-flip setting is the cabinet's).
+ *    17-11-2026: the layers in one pass (a line of each fetched a tile at a time, each pixel the layer MAME's order
+ *    draws last), the sprites clipped to the screen once: the same pictures (every frame of 14,000 of DoDonPachi's and
+ *    DonPachi's), 3.7 times faster (4.1 ms a frame to 1.1).
  */
 #include "cave/video.h"
 
@@ -53,90 +56,145 @@ static uint32_t colour(unsigned pen)
 
 /* ---- the tile layers (tmap038) ---- */
 
-/* The pen of layer 'layer' at its 512 x 512 map's point (x, y), with its tile's colour and priority */
-static unsigned layer_pixel(int layer, unsigned x, unsigned y, unsigned *palette_out, unsigned *priority_out)
+/* A screen line of a layer: each pixel's pen (0: none), and its tile's colour and priority */
+typedef struct
+{
+	uint8_t pen[VIDEO_WIDTH], palette[VIDEO_WIDTH], tile_priority[VIDEO_WIDTH];
+} layer_line;
+
+/* Layer 'layer''s line: its 512 x 512 map's pixels from (line_x, map_y) on, a tile (8 pixels) fetched at a time */
+static void fetch_line(int layer, int line_x, unsigned map_y, layer_line *out)
 {
 	const uint16_t *const ram = cave_board.layer_ram[layer];
 	const uint8_t *const gfx = rom_set.layer[layer];
 	const uint32_t tiles = layer_tiles[layer];
 	const int big = (cave_board.layer_regs[layer][1] & 0x2000u) != 0 && !(VIDEO->small_only >> layer & 1u);
-	uint32_t tile, code;
-	uint8_t byte;
+	const int eight = (VIDEO->eight_bits >> layer & 1u) != 0;
+	const unsigned y = map_y & 511u;
+	int x = 0;
 
-	x &= 511u;
-	y &= 511u;
-	if (big)
+	while (x < VIDEO_WIDTH)
 	{
-		const unsigned index = (y >> 4) * 32u + (x >> 4);
+		const unsigned mx = (unsigned)(x + line_x) & 511u;
+		const int run = 8 - (int)(mx & 7u);    /* (the pixels left in this 8 x 8 tile) */
+		uint32_t tile, code;
+		uint8_t palette, tile_priority;
 
-		tile = (uint32_t)ram[index * 2u] << 16 | ram[index * 2u + 1u];
-		code = (tile & 0xFFFFu) * 4u;
-		code ^= (x >> 3) & 1u;
-		code ^= ((y >> 3) & 1u) * 2u;
-	}
-	else
-	{
-		const unsigned index = (y >> 3) * 64u + (x >> 3);
+		if (big)
+		{
+			const unsigned index = (y >> 4) * 32u + (mx >> 4);
 
-		tile = (uint32_t)ram[0x2000u + index * 2u] << 16 | ram[0x2000u + index * 2u + 1u];
-		code = tile & 0x3FFFFu;
-	}
-	*palette_out = tile >> 24 & 0x3Fu;
-	*priority_out = tile >> 30;
-	code %= tiles;
-	if (VIDEO->eight_bits >> layer & 1u)
-	{
-		/* (MAME's layout_8x8x8: planes 8-11 then 0-3, the pixels' x at bits 0, 4, 16, 20, 32, 36, 48, 52 of a row
-		   of 64: a pixel's low nibble in one byte, its high nibble in the next, x even the bytes' high nibbles) */
-		const uint8_t *const pair = &gfx[code * 64u + (y & 7u) * 8u + ((x & 7u) >> 1) * 2u];
-		const unsigned shift = (x & 1u) ? 0u : 4u;
+			tile = (uint32_t)ram[index * 2u] << 16 | ram[index * 2u + 1u];
+			code = (tile & 0xFFFFu) * 4u;
+			code ^= (mx >> 3) & 1u;
+			code ^= ((y >> 3) & 1u) * 2u;
+		}
+		else
+		{
+			const unsigned index = (y >> 3) * 64u + (mx >> 3);
 
-		return (unsigned)((pair[1] >> shift & 15u) << 4 | (pair[0] >> shift & 15u));
+			tile = (uint32_t)ram[0x2000u + index * 2u] << 16 | ram[0x2000u + index * 2u + 1u];
+			code = tile & 0x3FFFFu;
+		}
+		palette = (uint8_t)(tile >> 24 & 0x3Fu);
+		tile_priority = (uint8_t)(tile >> 30);
+		code %= tiles;
+		for (int k = 0; k < run && x < VIDEO_WIDTH; k++, x++)
+		{
+			const unsigned px = (mx & 7u) + (unsigned)k;
+			unsigned pen;
+
+			if (eight)
+			{
+				/* (MAME's layout_8x8x8: planes 8-11 then 0-3, the pixels' x at bits 0, 4, 16, 20, 32, 36, 48, 52
+				   of a row of 64: a pixel's low nibble in one byte, its high nibble in the next, x even the bytes'
+				   high nibbles) */
+				const uint8_t *const pair = &gfx[code * 64u + (y & 7u) * 8u + (px >> 1) * 2u];
+				const unsigned shift = (px & 1u) ? 0u : 4u;
+
+				pen = (unsigned)((pair[1] >> shift & 15u) << 4 | (pair[0] >> shift & 15u));
+			}
+			else
+			{
+				const uint8_t byte = gfx[code * 32u + (y & 7u) * 4u + (px >> 1)];
+
+				pen = (px & 1u) ? (byte & 15u) : (byte >> 4);
+			}
+			out->pen[x] = (uint8_t)pen;
+			out->palette[x] = palette;
+			out->tile_priority[x] = tile_priority;
+		}
 	}
-	byte = gfx[code * 32u + (y & 7u) * 4u + ((x & 7u) >> 1)];
-	return (x & 1u) ? (byte & 15u) : (byte >> 4);
 }
 
-/* tilemap_draw: the tiles of priority 'tile_priority' of a layer whose own priority is 'layer_priority' */
-static void draw_layer(uint32_t *frame, int layer, unsigned tile_priority, unsigned layer_priority)
+/* tilemap_draw for every layer, as MAME draws them: the tiles of priority 0 to 3, each the layers of priority 0 to 3,
+   each layer by its number, each over what came before. Done in one pass: a pixel shows the last of those orders
+   that has a pen there, the one with the greatest (tile priority, layer priority, layer) */
+static void draw_layers(uint32_t *frame)
 {
-	const uint16_t *const regs = cave_board.layer_regs[layer];
-	const int big = (regs[1] & 0x2000u) != 0 && !(VIDEO->small_only >> layer & 1u);
-	const int row_effects = !(VIDEO->small_only >> layer & 1u);    /* (an 8x8-only layer has no line RAM) */
-	int offs_x = VIDEO->layer_offs_x;
-	int sx, sy;
+	static layer_line lines[4];
+	int on[4], layer_priority[4], sx[4], sy[4], row_effects[4];
+	const int layers = VIDEO->layers;
 
-	if ((regs[2] & 3u) != layer_priority || (regs[2] & 0x10u))
-		return;
-	offs_x -= big ? (layer + 1) : (layer + 1 + 8);
-	sx = (int)(regs[0] & 0x1FFu) - (int)cave_board.video_regs[0] - offs_x;
-	sy = (int)(regs[1] & 0x1FFu) - (int)cave_board.video_regs[1] - VIDEO->layer_offs_y;
+	for (int layer = 0; layer < layers; layer++)
+	{
+		const uint16_t *const regs = cave_board.layer_regs[layer];
+		const int big = (regs[1] & 0x2000u) != 0 && !(VIDEO->small_only >> layer & 1u);
+		const int offs_x = VIDEO->layer_offs_x - (big ? (layer + 1) : (layer + 1 + 8));
+
+		on[layer] = !(regs[2] & 0x10u);
+		layer_priority[layer] = regs[2] & 3u;
+		row_effects[layer] = !(VIDEO->small_only >> layer & 1u);    /* (an 8x8-only layer has no line RAM) */
+		sx[layer] = (int)(regs[0] & 0x1FFu) - (int)cave_board.video_regs[0] - offs_x;
+		sy[layer] = (int)(regs[1] & 0x1FFu) - (int)cave_board.video_regs[1] - VIDEO->layer_offs_y;
+	}
 	for (int y = 0; y < VIDEO_HEIGHT; y++)
 	{
-		/* row-scroll (a line's own x scroll, added) and row-select (the map's line a screen line shows), from the
-		   layer's line RAM (tmap038's lineram, 0x1000 bytes into its RAM: two words a line), read at the line
-		   sy - 1 + y (cave_v.cpp's m_row_effect_offs_n) */
-		int line_x = sx, line_y = y + sy;
-
-		if (row_effects && (regs[0] & 0x4000u || regs[1] & 0x4000u))
+		for (int layer = 0; layer < layers; layer++)
 		{
-			const uint16_t *const line = &cave_board.layer_ram[layer][0x800u + ((unsigned)(sy - 1 + y) & 0x1FFu) * 2u];
+			const uint16_t *const regs = cave_board.layer_regs[layer];
+			/* row-scroll (a line's own x scroll, added) and row-select (the map's line a screen line shows), from
+			   the layer's line RAM (tmap038's lineram, 0x1000 bytes into its RAM: two words a line), read at the
+			   line sy - 1 + y (cave_v.cpp's m_row_effect_offs_n) */
+			int line_x = sx[layer], line_y = y + sy[layer];
 
-			if (regs[0] & 0x4000u)
-				line_x += line[0];
-			if (regs[1] & 0x4000u)
-				line_y = line[1];
+			if (!on[layer])
+				continue;
+			if (row_effects[layer] && (regs[0] & 0x4000u || regs[1] & 0x4000u))
+			{
+				const uint16_t *const line =
+					&cave_board.layer_ram[layer][0x800u + ((unsigned)(sy[layer] - 1 + y) & 0x1FFu) * 2u];
+
+				if (regs[0] & 0x4000u)
+					line_x += line[0];
+				if (regs[1] & 0x4000u)
+					line_y = line[1];
+			}
+			fetch_line(layer, line_x, (unsigned)line_y, &lines[layer]);
 		}
 		for (int x = 0; x < VIDEO_WIDTH; x++)
 		{
-			unsigned palette, tile_pri;
-			const unsigned pen = layer_pixel(layer, (unsigned)(x + line_x), (unsigned)line_y, &palette, &tile_pri);
+			int best = -1, best_key = -1;
 
-			if (pen == 0 || tile_pri != tile_priority)
-				continue;
-			frame[y * VIDEO_WIDTH + x] = colour(VIDEO->layer_colour_base
-				+ (VIDEO->eight_bits >> layer & 1u ? palette * 256u : palette * colour_step()) + pen);
-			priority[y][x] = (uint8_t)(tile_priority + 1u);
+			for (int layer = 0; layer < layers; layer++)
+				if (on[layer] && lines[layer].pen[x])
+				{
+					const int key = lines[layer].tile_priority[x] * 16 + layer_priority[layer] * 4 + layer;
+
+					if (key > best_key)
+					{
+						best_key = key;
+						best = layer;
+					}
+				}
+			if (best >= 0)
+			{
+				const unsigned palette = lines[best].palette[x], pen = lines[best].pen[x];
+
+				frame[y * VIDEO_WIDTH + x] = colour(VIDEO->layer_colour_base
+					+ (VIDEO->eight_bits >> best & 1u ? palette * 256u : palette * colour_step()) + pen);
+				priority[y][x] = (uint8_t)(lines[best].tile_priority[x] + 1u);
+			}
 		}
 	}
 }
@@ -181,24 +239,24 @@ void video_latch_sprites(void)
 		clock += (uint32_t)(width * height);
 		if (clock > MAX_SPRITE_CLOCK)
 			break;
-		for (int row = 0; row < height; row++)
 		{
-			const int draw_y = y + row;
-			const int src_y = flipy ? height - 1 - row : row;
+			/* (the rows and columns on the screen only) */
+			const int row0 = y < 0 ? -y : 0, row1 = y + height > VIDEO_HEIGHT ? VIDEO_HEIGHT - y : height;
+			const int column0 = x < 0 ? -x : 0, column1 = x + width > VIDEO_WIDTH ? VIDEO_WIDTH - x : width;
 
-			if (draw_y < 0 || draw_y >= VIDEO_HEIGHT)
-				continue;
-			for (int column = 0; column < width; column++)
+			for (int row = row0; row < row1; row++)
 			{
-				const int draw_x = x + column;
-				const int src_x = flipx ? width - 1 - column : column;
-				unsigned pen;
+				const int src_y = flipy ? height - 1 - row : row;
+				const uint32_t line = (code << 8) + (uint32_t)(src_y * width);
+				uint16_t *const out = &sprite_layer[y + row][x];
 
-				if (draw_x < 0 || draw_x >= VIDEO_WIDTH)
-					continue;
-				pen = sprite_pen((code << 8) + (uint32_t)(src_y * width + src_x));
-				if (pen)
-					sprite_layer[draw_y][draw_x] = (uint16_t)(pen | colpri);
+				for (int column = column0; column < column1; column++)
+				{
+					const unsigned pen = sprite_pen(line + (uint32_t)(flipx ? width - 1 - column : column));
+
+					if (pen)
+						out[column] = (uint16_t)(pen | colpri);
+				}
 			}
 		}
 	}
@@ -233,10 +291,7 @@ void video_draw(uint32_t *frame)
 	for (int index = 0; index < VIDEO_WIDTH * VIDEO_HEIGHT; index++)
 		frame[index] = background;
 	memset(priority, 0, sizeof(priority));
-	for (unsigned pri = 0; pri <= 3u; pri++)
-		for (unsigned pri2 = 0; pri2 <= 3u; pri2++)
-			for (int layer = 0; layer < VIDEO->layers; layer++)
-				draw_layer(frame, layer, pri, pri2);
+	draw_layers(frame);
 	draw_sprites(frame);
 }
 
