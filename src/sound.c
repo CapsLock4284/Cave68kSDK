@@ -473,6 +473,37 @@ static int ymz_generate(int number)
 	return value;
 }
 
+/* each voice's group (cave_sound_set_level), from where its sound starts: looked up again when that changes (a new
+   sound, or a save state's load). The ring takes the voices at their groups' levels; the chip's own state never
+   does, so the board plays the same whatever the levels */
+static struct
+{
+	uint32_t start;
+	uint8_t group;
+} ymz_groups[8] = {
+	{ UINT32_MAX, 0 }, { UINT32_MAX, 0 }, { UINT32_MAX, 0 }, { UINT32_MAX, 0 },
+	{ UINT32_MAX, 0 }, { UINT32_MAX, 0 }, { UINT32_MAX, 0 }, { UINT32_MAX, 0 },
+};
+
+static uint8_t ymz_voice_group(int number, const cave_ymz_voice *voice)
+{
+	if (ymz_groups[number].start != voice->start)
+	{
+		const uint32_t at = voice->start / 2u;    /* (its byte in CAVE_ROM_SOUND0: 'start' counts nibbles) */
+		uint8_t group = SOUND->chip_group[0];
+
+		for (int index = 0; index < SOUND->sample_count; index++)
+			if (SOUND->samples[index].chip == 0 && SOUND->samples[index].at == at)
+			{
+				group = SOUND->samples[index].group;
+				break;
+			}
+		ymz_groups[number].start = voice->start;
+		ymz_groups[number].group = group;
+	}
+	return ymz_groups[number].group;
+}
+
 /* the chip's next sample (sound_stream_update, a sample at a time): each voice's own samples to the chip's rate by
    MAME's linear interpolation, at its levels, both outputs (MAME's speaker is mono: the two added) */
 static void ymz_sample(void)
@@ -502,8 +533,12 @@ static void ymz_sample(void)
 		}
 		interpolated = (voice->last_sample * (YMZ_FRAC_ONE - voice->output_pos) + voice->curr_sample * voice->output_pos)
 			>> YMZ_FRAC_BITS;
-		mixed += (float)(interpolated * voice->output_left / 2) / (32768.0f * 256.0f)
-			+ (float)(interpolated * voice->output_right / 2) / (32768.0f * 256.0f);
+		{
+			const float both = (float)(interpolated * voice->output_left / 2) / (32768.0f * 256.0f)
+				+ (float)(interpolated * voice->output_right / 2) / (32768.0f * 256.0f);
+
+			mixed += levels_all_one ? both : both * group_level[ymz_voice_group(number, voice)];
+		}
 		voice->output_pos += voice->output_step;
 	}
 	ymz_ring[chip->samples & (YMZ_RING - 1u)] = mixed;

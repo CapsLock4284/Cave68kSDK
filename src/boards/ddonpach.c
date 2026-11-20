@@ -124,11 +124,42 @@ static const cave_video_desc ddonpach_video = {
 	0,                          /* the sprites' pixels high nibble first (their ROMs word swapped), as DonPachi's */
 };
 
+/* The sounds' groups: the program's table of its 66 sounds (pointers at $06D056; each sound's flags, rate, level,
+   pan, then its start, stop and loop in bytes of the samples' ROM) has the music last, #55-#65, each played on voice
+   0; the voices, #44-#54, are the owner's choice, by ear (each decoded from the ROM set and listened to). All the
+   others are effects */
+static const cave_sound_sample ddonpach_groups[] = {
+	{ 0, 0x2130C8u, 1 },    /* #55, looped */
+	{ 0, 0x2815C7u, 1 },    /* #56, looped */
+	{ 0, 0x300000u, 1 },    /* #57 */
+	{ 0, 0x200000u, 1 },    /* #58, looped */
+	{ 0, 0x315EA6u, 1 },    /* #59, looped */
+	{ 0, 0x3517D2u, 1 },    /* #60, looped */
+	{ 0, 0x3C04F5u, 1 },    /* #61, looped */
+	{ 0, 0x193993u, 1 },    /* #62, looped */
+	{ 0, 0x0018F0u, 1 },    /* #63, looped */
+	{ 0, 0x1C640Cu, 1 },    /* #64, looped */
+	{ 0, 0x167D98u, 1 },    /* #65, looped */
+	{ 0, 0x100000u, 2 },    /* #44 */
+	{ 0, 0x10994Cu, 2 },    /* #45 */
+	{ 0, 0x1162DAu, 2 },    /* #46 */
+	{ 0, 0x11A6CDu, 2 },    /* #47 */
+	{ 0, 0x11EDABu, 2 },    /* #48 */
+	{ 0, 0x121436u, 2 },    /* #49 */
+	{ 0, 0x122F65u, 2 },    /* #50 */
+	{ 0, 0x126690u, 2 },    /* #51 */
+	{ 0, 0x0AA4BEu, 2 },    /* #52 */
+	{ 0, 0x0AC86Cu, 2 },    /* #53 */
+	{ 0, 0x3E83DFu, 2 },    /* #54 */
+};
+
 static const cave_sound_desc ddonpach_sound = {
 	CAVE_SOUND_YMZ280B,
 	{ 16934400u, 0 }, 384u,     /* (the YMZ280B: 16.9344 MHz) */
 	{ 1.0, 0.0 },
 	0, 0,
+	{ 0u, 0u },                 /* effects, but for those listed */
+	ddonpach_groups, COUNT(ddonpach_groups),
 };
 
 /* The credits: the word at $1013AA (a coin adds to it, at most 9; a start takes); bit 0 of $101297, the test
