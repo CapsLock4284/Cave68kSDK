@@ -77,6 +77,21 @@ static uint64_t output_clock;                  /* (what is left over of the outp
    LoFi takes the 4 before it: the frame before's last ones, 'history'), and its interpolation table */
 static double resample_position[2];
 static float history[2][HISTORY];
+
+/* The groups' levels (cave_sound_set_level), and what is heard of each chip: its samples again, each voice at its
+   group's level. The chips' own samples (cave_oki's 'samples', part of the board's state) are never changed by them:
+   only the mix reads these */
+static float group_level[CAVE_SOUND_GROUPS] = { 1.0f, 1.0f, 1.0f };
+static bool levels_all_one = true;
+static float heard[2][CAVE_SOUND_FRAME_MOST];
+static float heard_now;    /* (oki_sample's sum at the groups' levels, with its sample) */
+
+/* each voice's group, found as its sound starts (and again after a save state's load: the sound it plays then) */
+static struct
+{
+	uint32_t base, count;
+	uint8_t group;
+} voice_groups[2][4];
 static float lofi_table[2][0x1001];
 
 /* the high-pass filter (a biquad, in floats as MAME's): its coefficients and the last values in and out */
@@ -197,7 +212,10 @@ static void catch_up(bool to_the_end)
 			: (uint32_t)((uint64_t)oki->due * elapsed / clock_frame);
 
 		while (oki->made < want)
-			oki->samples[oki->made++] = oki_sample(chip);
+		{
+			oki->samples[oki->made] = oki_sample(chip);
+			heard[chip][oki->made++] = heard_now;
+		}
 	}
 }
 
@@ -237,6 +255,39 @@ static uint8_t oki_byte(int chip, uint32_t address)
 	if ((chip_paged >> chip & 1u) && address < 0x400u)
 		return region[(page_of(chip, cave_board.sound.bank[4 + (address >> 8)]) << 16) | address];
 	return region[(page_of(chip, cave_board.sound.bank[chip * 4 + bank]) << 16) | (address & 0xFFFFu)];
+}
+
+/* ---- the sounds' groups ---- */
+
+void cave_sound_set_level(cave_sound_group group, float level)
+{
+	if (group < 0 || group >= CAVE_SOUND_GROUPS)
+		return;
+	group_level[group] = level < 0.0f ? 0.0f : level > 1.0f ? 1.0f : level;
+	levels_all_one = group_level[0] == 1.0f && group_level[1] == 1.0f && group_level[2] == 1.0f;
+}
+
+/* the group of an OKI voice's sound: its start in the chip's ROM (the NMK112's page of the bank it is in), looked up
+   in the description's list, or its chip's */
+static uint8_t oki_voice_group(int chip, int number, const cave_oki_voice *voice)
+{
+	if (voice_groups[chip][number].base != voice->base || voice_groups[chip][number].count != voice->count)
+	{
+		const uint32_t at = page_of(chip, cave_board.sound.bank[chip * 4 + ((voice->base >> 16) & 3u)]) << 16
+			| (voice->base & 0xFFFFu);
+		uint8_t group = SOUND->chip_group[chip];
+
+		for (int index = 0; index < SOUND->sample_count; index++)
+			if (SOUND->samples[index].chip == chip && SOUND->samples[index].at == at)
+			{
+				group = SOUND->samples[index].group;
+				break;
+			}
+		voice_groups[chip][number].base = voice->base;
+		voice_groups[chip][number].count = voice->count;
+		voice_groups[chip][number].group = group < CAVE_SOUND_GROUPS ? group : CAVE_SOUND_EFFECTS;
+	}
+	return voice_groups[chip][number].group;
 }
 
 /* ---- the YMZ280B ---- */
@@ -741,6 +792,7 @@ void cave_sound_command(int chip, uint8_t data)
 					voice->signal = 0;
 					voice->step = 0;
 					voice->volume = volume_table[data & 0x0Fu];
+					oki_voice_group(chip, number, voice);    /* (its group, from the banks as it starts) */
 				}
 			}
 		oki->command = -1;
@@ -763,6 +815,7 @@ static int oki_sample(int chip)
 {
 	cave_oki *const oki = &cave_board.sound.oki[chip];
 	int sum = 0;
+	float at_levels = 0.0f;
 
 	for (int number = 0; number < 4; number++)
 	{
@@ -783,9 +836,12 @@ static int oki_sample(int chip)
 		else if (voice->step < 0)
 			voice->step = 0;
 		sum += voice->signal * voice->volume;
+		if (!levels_all_one)
+			at_levels += (float)(voice->signal * voice->volume) * group_level[oki_voice_group(chip, number, voice)];
 		if (++voice->sample >= voice->count)
 			voice->playing = false;
 	}
+	heard_now = levels_all_one ? (float)sum : at_levels;
 	return sum;
 }
 
@@ -812,7 +868,7 @@ static float lofi(int chip, double position)
 		const int index = below - 4 + k;
 
 		s[k] = index < 0 ? history[chip][HISTORY + index]
-			: (float)oki->samples[index < (int)oki->made ? index : (int)oki->made - 1] / (2048.0f * 32.0f);
+			: heard[chip][index < (int)oki->made ? index : (int)oki->made - 1] / (2048.0f * 32.0f);
 	}
 	return -s[0] * lofi_table[0][0x1000 - phase] + s[1] * lofi_table[1][0x1000 - phase] + s[2] * lofi_table[1][phase]
 		- s[3] * lofi_table[0][phase];
@@ -935,7 +991,7 @@ void cave_sound_frame(void)
 		{
 			const int index = (int)oki->made - HISTORY + k;
 
-			last[k] = index < 0 ? history[chip][HISTORY + index] : (float)oki->samples[index] / (2048.0f * 32.0f);
+			last[k] = index < 0 ? history[chip][HISTORY + index] : heard[chip][index] / (2048.0f * 32.0f);
 		}
 		memcpy(history[chip], last, sizeof(last));
 		resample_position[chip] -= oki->made;

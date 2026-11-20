@@ -157,7 +157,20 @@ typedef struct
 	double gain[2];             /* each chip's level in the mix */
 	uint32_t skip;              /* the empty bytes at the start of each chip's region (the NMK112's old layout) */
 	uint8_t paged_table;        /* the chips (bit n: chip n) whose sample table the NMK112 pages too */
+	/* the sounds' groups (cave/sound.h's cave_sound_group: 0 effects, 1 music, 2 voices), for their own levels: */
+	uint8_t chip_group[2];      /* each chip's sounds' group, but for those listed */
+	const struct cave_sound_sample *samples;    /* the sounds whose group isn't their chip's */
+	int sample_count;
 } cave_sound_desc;
+
+/* A sound of the chip's whose group isn't the chip's own: where it starts in the chip's ROM (an OKI: its byte in the
+   chip's region past 'skip', the NMK112's page included; the YMZ280B: its byte in CAVE_ROM_SOUND0) */
+typedef struct cave_sound_sample
+{
+	uint8_t chip;
+	uint32_t at;
+	uint8_t group;
+} cave_sound_sample;
 
 /* ---- the game's credits (cave/free_play.h) ---- */
 

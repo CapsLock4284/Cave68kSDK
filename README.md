@@ -22,7 +22,7 @@ the sprite format, the sound chips and the ROM files. Each game gets a **board d
 | Bus | `cave_region[]` | address ranges and the device behind each (program ROM, work RAM, a layer's RAM, palette, M6295, NMK112, inputs, EEPROM, …), looked through in order |
 | ROM set | `cave_rom_desc` | the versions (MAME's sets, parent and clones), their files by name, CRC32 and size, and where each file is loaded (as is, byte-swapped, or interleaved into even and odd bytes) |
 | Picture | `cave_video_desc` | the number of layers, which are 8×8 only, the layer offsets, colour bases, sprite format and sprite bank size |
-| Sound | `cave_sound_desc` | the chip kind, clocks, divisor, mix levels and NMK112 layout |
+| Sound | `cave_sound_desc` | the chip kind, clocks, divisor, mix levels and NMK112 layout; which sounds are music, effects and voices (each chip's group, and the sounds that differ), for the ports' separate volumes (`cave_sound_set_level`, cave/sound.h) |
 | Credits | `cave_credits_desc` | where the program counts its credits and the setting that makes a game take 2, for free play (`free_play.c`: Start drops in the coins first) |
 
 The descriptions live in `src/boards/`, one file per game, and are listed in `include/cave/boards.h`.

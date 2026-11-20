@@ -105,11 +105,44 @@ static const cave_video_desc donpachi_video = {
 	0x800u,                     /* the palette: A08000-A08FFF */
 };
 
+/* The voices (the owner's choice, by ear, of the long or loud sounds #1 plays a few times a game: logged through both
+   loops, tests/harness/sfx_log's way): #1's other sounds are effects; #0's are all music */
+static const cave_sound_sample donpachi_voices[] = {
+	{ 1, 0x008D6Au, 2 },
+	{ 1, 0x037099u, 2 },
+	{ 1, 0x039EA1u, 2 },
+	{ 1, 0x04CBD9u, 2 },
+	{ 1, 0x06AA3Bu, 2 },
+	{ 1, 0x084504u, 2 },
+	{ 1, 0x08ABB0u, 2 },
+	{ 1, 0x090400u, 2 },
+	{ 1, 0x092D7Au, 2 },
+	{ 1, 0x096427u, 2 },
+	{ 1, 0x09B681u, 2 },
+	{ 1, 0x0A0400u, 2 },
+	{ 1, 0x0AB5F3u, 2 },
+	{ 1, 0x0B0400u, 2 },
+	{ 1, 0x0B69E8u, 2 },
+	{ 1, 0x0BA5EEu, 2 },
+	{ 1, 0x0C0400u, 2 },
+	{ 1, 0x0C6FE5u, 2 },
+	{ 1, 0x0CDC6Eu, 2 },
+	{ 1, 0x0D0400u, 2 },
+	{ 1, 0x0D7FCEu, 2 },
+	{ 1, 0x0E0400u, 2 },
+	{ 1, 0x0E627Fu, 2 },
+	{ 1, 0x0ED620u, 2 },
+	{ 1, 0x0F0400u, 2 },
+	{ 1, 0x0F66A5u, 2 }
+};
+
 static const cave_sound_desc donpachi_sound = {
 	CAVE_SOUND_OKI_NMK112,
 	{ 4220000u / 4u, 4220000u / 2u }, 132u,
 	{ 1.60, 1.0 },
 	0x040000u, 1u << 1,
+	{ 1u, 0u },                 /* #0 music, #1 effects (and its voices) */
+	donpachi_voices, COUNT(donpachi_voices),
 };
 
 /* The credits: the word at $10139A (the coin routine at 00CBDA adds to it; MAME's "Infinite Credits" cheat writes

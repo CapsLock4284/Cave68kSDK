@@ -156,6 +156,20 @@ unsigned cave_sound_take(int16_t *out, unsigned most);
 /* Drops the samples not yet taken (a port that skips ahead: its fast forward) */
 void cave_sound_drop(void);
 
+/* The sounds' groups, each with its own level in what the ports play (the board's description says which sound is
+   which: cave/board.h's cave_sound_desc). Only what is heard changes: the chips, their state and their timing are
+   the same whatever the levels, so the game, its save states and its replays are too */
+typedef enum
+{
+	CAVE_SOUND_EFFECTS,         /* (a sound the description doesn't name is an effect) */
+	CAVE_SOUND_MUSIC,
+	CAVE_SOUND_VOICES,
+	CAVE_SOUND_GROUPS
+} cave_sound_group;
+
+/* A group's level: 0 (silent) to 1 (as the board plays it, the default) */
+void cave_sound_set_level(cave_sound_group group, float level);
+
 #ifdef __cplusplus
 }
 #endif
