@@ -12,6 +12,8 @@
  *    17-11-2026: the layers in one pass (a line of each fetched a tile at a time, each pixel the layer MAME's order
  *    draws last), the sprites clipped to the screen once: the same pictures (every frame of 14,000 of DoDonPachi's and
  *    DonPachi's), 3.7 times faster (4.1 ms a frame to 1.1).
+ *    20-11-2026: the planes (video_draw_planes, video_compose): each layer and the sprites apart, for the ports'
+ *    pixel-art scalers to make larger one by one (cave/video.h).
  */
 #include "cave/video.h"
 
@@ -130,7 +132,7 @@ static void fetch_line(int layer, int line_x, unsigned map_y, layer_line *out)
 /* tilemap_draw for every layer, as MAME draws them: the tiles of priority 0 to 3, each the layers of priority 0 to 3,
    each layer by its number, each over what came before. Done in one pass: a pixel shows the last of those orders
    that has a pen there, the one with the greatest (tile priority, layer priority, layer) */
-static void draw_layers(uint32_t *frame)
+static void draw_layers(uint32_t *frame, uint32_t *const *planes)
 {
 	static layer_line lines[4];
 	int on[4], layer_priority[4], sx[4], sy[4], row_effects[4];
@@ -171,6 +173,29 @@ static void draw_layers(uint32_t *frame)
 					line_y = line[1];
 			}
 			fetch_line(layer, line_x, (unsigned)line_y, &lines[layer]);
+		}
+		if (planes)
+		{
+			/* (each layer's pixels in its own plane, keyed: video_compose picks among them) */
+			for (int layer = 0; layer < layers; layer++)
+			{
+				uint32_t *const out = planes[layer] + y * VIDEO_WIDTH;
+
+				if (!on[layer])
+				{
+					memset(out, 0, VIDEO_WIDTH * sizeof(uint32_t));
+					continue;
+				}
+				for (int x = 0; x < VIDEO_WIDTH; x++)
+				{
+					const unsigned palette = lines[layer].palette[x], pen = lines[layer].pen[x];
+
+					out[x] = pen ? (uint32_t)(1 + lines[layer].tile_priority[x] * 16 + layer_priority[layer] * 4
+						+ layer) << 24 | colour(VIDEO->layer_colour_base
+						+ (VIDEO->eight_bits >> layer & 1u ? palette * 256u : palette * colour_step()) + pen) : 0u;
+				}
+			}
+			continue;
 		}
 		for (int x = 0; x < VIDEO_WIDTH; x++)
 		{
@@ -291,8 +316,48 @@ void video_draw(uint32_t *frame)
 	for (int index = 0; index < VIDEO_WIDTH * VIDEO_HEIGHT; index++)
 		frame[index] = background;
 	memset(priority, 0, sizeof(priority));
-	draw_layers(frame);
+	draw_layers(frame, NULL);
 	draw_sprites(frame);
+}
+
+int video_draw_planes(uint32_t *planes[VIDEO_PLANES], uint32_t *background)
+{
+	const int layers = VIDEO->layers;
+	uint32_t *const sprites = planes[layers];
+
+	take_sizes();
+	*background = colour(VIDEO->background_pen);
+	draw_layers(NULL, planes);
+	for (int y = 0; y < VIDEO_HEIGHT; y++)
+		for (int x = 0; x < VIDEO_WIDTH; x++)
+		{
+			const uint16_t pixel = sprite_layer[y][x];
+			const unsigned colpri = pixel >> 8;
+
+			sprites[y * VIDEO_WIDTH + x] = pixel ? (uint32_t)(1u + (colpri >> 6 & 3u)) << 24
+				| colour((pixel & 0xFFu) + (colpri & 0x3Fu) * colour_step()) : 0u;
+		}
+	return layers + 1;
+}
+
+void video_compose(const uint32_t *const *planes, int count, uint32_t background, size_t pixels, uint32_t *out)
+{
+	const uint32_t *const sprites = planes[count - 1];
+
+	for (size_t at = 0; at < pixels; at++)
+	{
+		uint32_t best = 0;
+		unsigned tile_priority = 0;    /* (0 none: the background; else the tile's priority + 1) */
+
+		for (int layer = 0; layer < count - 1; layer++)
+			if (planes[layer][at] > best)    /* (the key in the top byte: the greatest wins) */
+				best = planes[layer][at];
+		if (best)
+			tile_priority = ((best >> 24) - 1u) / 16u + 1u;
+		if (sprites[at] && tile_priority <= (sprites[at] >> 24) - 1u)
+			best = sprites[at];
+		out[at] = best ? best & 0xFFFFFFu : background;
+	}
 }
 
 void video_rotated(const uint32_t *frame, uint32_t *picture)

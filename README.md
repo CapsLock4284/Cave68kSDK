@@ -41,7 +41,7 @@ Until a game chooses, the board is DonPachi's.
 | File | What it does |
 |---|---|
 | `src/machine.c` | the board: the 68000 bus (driven by the description), interrupts, EEPROM (93C46), inputs, the state hash |
-| `src/video.c` | the NEC 038 tile layers, the 013 sprites and the palette, drawn to a 320×240 frame |
+| `src/video.c` | the NEC 038 tile layers, the 013 sprites and the palette, drawn to a 320×240 frame; or as planes (each layer and the sprites apart, keyed by priority) for a port to scale one by one and put together again (`video_draw_planes`, `video_compose`) |
 | `src/sound.c` | two OKI M6295s behind an NMK112, or a YMZ280B (its voices, and its interrupt to the 68000 at the sample a voice ends), resampled and mixed as MAME does, 48 kHz |
 | `src/rom_set.c` | the ROM set from a .zip or folder (files known by CRC32, merged and split sets, clones over their parent), and the extracted data file |
 | `src/game_program.c` | the glue between the recompiled program and the board: the frame loop, save states, the program's tasks |
