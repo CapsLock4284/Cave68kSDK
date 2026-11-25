@@ -72,6 +72,7 @@ static uint64_t lead_cycles(void)
 		? (uint64_t)cave_board_description->vblank_lead_usec * (CAVE_CPU_CLOCK / 1000000u) : 0u;
 }
 static bool timed;                 /* the program counts its cycles */
+static uint64_t screen_at = UINT64_MAX;    /* the screen's own VBLANK to come (program_at_screen_vblank), or none */
 static uint64_t slow_frames;       /* the VBLANKs that came while it worked */
 static bool lagged;                /* the last one did */
 static uint64_t time_at_wait = RESET_CYCLES;    /* the time as the program last waited (another since: it counts
@@ -108,7 +109,7 @@ struct program_state
 	uint32_t saved[MAX_DEPTH];
 	size_t depth;
 	uint32_t interrupts;
-	uint64_t time, vblank_at, slow_frames, work_began, handled_at, time_at_wait, last_frame_cycles;
+	uint64_t time, vblank_at, slow_frames, work_began, handled_at, time_at_wait, last_frame_cycles, screen_at;
 	bool waiting, timed;    /* (timed: the program has counted its cycles yet; it has not in its first frames, as it
 	                           starts: a state from then put back after a frame that has must not be taken as timed) */
 	jmp_buf registers;
@@ -307,6 +308,7 @@ void return_from_exception(void)
 }
 
 void (*program_after_vblank)(void);
+void (*program_at_screen_vblank)(void);
 
 /* the next of the board's events: the VBLANK, or the sound chip's */
 static void schedule(void)
@@ -314,6 +316,25 @@ static void schedule(void)
 	const uint64_t sound = cave_sound_event_at();
 
 	m68k_event_at = sound < m68k_vblank_at ? sound : m68k_vblank_at;
+	if (screen_at < m68k_event_at)
+		m68k_event_at = screen_at;
+}
+
+/* the screen's VBLANK after the vblank interrupt that came at 'vblank': the lead after it (none without one: the
+   picture's call then comes as the interrupt returns, take_interrupts) */
+static void screen_after(uint64_t vblank)
+{
+	const uint64_t lead = lead_cycles();
+
+	screen_at = lead && program_at_screen_vblank ? vblank + lead : UINT64_MAX;
+}
+
+/* the screen's VBLANK came: the picture's call (its own: nothing of the program's changes) */
+static void screen_came(void)
+{
+	screen_at = UINT64_MAX;
+	if (program_at_screen_vblank)
+		program_at_screen_vblank();
 }
 
 /* the sound chip's interrupt or what comes next changed by the program's access: looked at again as the access's
@@ -349,6 +370,8 @@ void take_interrupts(void)
 			handled_at = m68k_time;    /* (a wait the program comes to straight after is the one it ended) */
 		if (level == 1 && depth == 0 && vblank && program_after_vblank)
 			program_after_vblank();
+		if (level == 1 && depth == 0 && vblank && !lead_cycles() && program_at_screen_vblank)
+			program_at_screen_vblank();    /* (no lead: the screen's VBLANK is the interrupt's) */
 	}
 }
 
@@ -380,6 +403,7 @@ static void vblank_came(void)
 	}
 	vblank_time = m68k_vblank_at;
 	m68k_vblank_at += FRAME_CYCLES;
+	screen_after(vblank_time);
 	was_waiting = waiting;
 	lagged = !was_waiting;
 	if (was_waiting)
@@ -394,12 +418,21 @@ static void vblank_came(void)
    sample), in the order they came; then the interrupts they raised are taken, as the instruction ends */
 void m68k_event_came(uint64_t at)
 {
+	if (screen_at <= at && m68k_vblank_at > at && cave_sound_event_at() > at)
+	{
+		/* (the screen's VBLANK alone: the picture's, nothing of the board's; the program's timing as without it) */
+		screen_came();
+		schedule();
+		return;
+	}
 	timed = true;
 	for (;;)
 	{
 		const uint64_t sound = cave_sound_event_at();
 
-		if (sound <= at && sound < m68k_vblank_at)
+		if (screen_at <= at && screen_at <= sound && screen_at < m68k_vblank_at)
+			screen_came();
+		else if (sound <= at && sound < m68k_vblank_at)
 			cave_sound_run_to(sound);
 		else if (m68k_vblank_at <= at)
 			vblank_came();
@@ -461,6 +494,7 @@ void frame_wait(void)
 		program_at_wait();
 	m68k_time = vblank_time = m68k_vblank_at;
 	m68k_vblank_at += FRAME_CYCLES;
+	screen_after(vblank_time);
 	schedule();
 	time_at_wait = m68k_time;
 	next_frame();
@@ -497,6 +531,7 @@ static void reset_board(void)
 	m68k_time = time_at_wait = work_began = handled_at = RESET_CYCLES;
 	m68k_extra = 0;
 	m68k_vblank_at = FRAME_CYCLES - lead_cycles();
+	screen_at = UINT64_MAX;
 	schedule();
 	waiting = lagged = false;
 }
@@ -581,6 +616,7 @@ const char *program_start(void)
 	m68k_time = time_at_wait = work_began = handled_at = RESET_CYCLES;
 	m68k_extra = 0;
 	m68k_vblank_at = FRAME_CYCLES - lead_cycles();
+	screen_at = UINT64_MAX;
 	schedule();
 	slow_frames = 0;
 	waiting = false;
@@ -621,6 +657,7 @@ program_state *program_state_save(void)
 	state->interrupts = interrupts;
 	state->time = m68k_time;
 	state->vblank_at = m68k_vblank_at;
+	state->screen_at = screen_at;
 	state->slow_frames = slow_frames;
 	state->work_began = work_began;
 	state->handled_at = handled_at;
@@ -660,6 +697,7 @@ void program_state_load(const program_state *state)
 	last_frame_cycles = state->last_frame_cycles;
 	timed = state->timed;
 	m68k_vblank_at = state->vblank_at;
+	screen_at = state->screen_at;
 	schedule();
 	slow_frames = state->slow_frames;
 	work_began = state->work_began;

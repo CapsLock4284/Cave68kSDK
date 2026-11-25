@@ -75,6 +75,16 @@ extern void (*program_at_wait)(void);
    palette, which the next interrupt sets) */
 extern void (*program_after_vblank)(void);
 
+/* Called, when set, at the screen's own VBLANK: the frame's end, the board's vblank_lead_usec after its vblank
+   interrupt came (program_set_vblank_lead), at the end of the instruction it comes in: by then the interrupt's
+   handler has flipped the sprite banks and set the layers' scroll and the palette, and the program's work may have
+   gone on (a fade's step, a register written early in the frame). MAME draws the screen there; a port that draws its
+   picture there, with the sprites latched when the interrupt came (program_run_frame's return), shows what MAME shows:
+   checked against MAME's own ddonpach at every picture before the games part (DoDonPachi Recomp's
+   tests/mame_compare). With no lead (a board without one, or the lead off), as the vblank interrupt returns, as
+   program_after_vblank. Only the picture: nothing the program runs changes with it */
+extern void (*program_at_screen_vblank)(void);
+
 /* Save states, kept in memory (not in files: what they hold is only good while the program runs): the whole board
    (cave_machine: its RAMs, the video, the sound chips, the EEPROM), the 68000's status, and the program's own stack
    where it waits for its frame. program_state_save takes one between frames (program_run_frame has returned): NULL
