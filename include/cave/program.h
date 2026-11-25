@@ -48,6 +48,13 @@ void program_reset(void);
    program was still working, since the start */
 void program_set_slowdown(bool on);
 bool program_slowdown(void);
+
+/* The VBLANK's interrupt early, as the board's description has it (cave_board_desc's vblank_lead_usec: MAME's 90 us
+   before the frame's end for DonPachi and DoDonPachi): on by default. Off: at the frame's end, as the SDK had it before
+   25-11-2026 (a replay made before then plays with it off). Taken at the program's start and at each reset: set it
+   before program_start, or before a reset */
+void program_set_vblank_lead(bool on);
+bool program_vblank_lead(void);
 bool program_timed(void);
 uint64_t program_slow_frames(void);
 uint64_t program_frame_cycles(void);    /* the 68000 cycles the program counted from its last wait to this one */

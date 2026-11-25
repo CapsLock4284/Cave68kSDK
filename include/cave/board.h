@@ -191,6 +191,9 @@ typedef struct
 	const cave_video_desc *video;
 	const cave_sound_desc *sound;
 	const cave_credits_desc *credits;    /* the program's credits, for free play (NULL: free play does nothing) */
+	uint16_t vblank_lead_usec;  /* how long before the frame's end the VBLANK's interrupt comes, in microseconds: MAME's
+	                               m_time_vblank_irq (cave.cpp's interrupt sets the interrupt's timer to 17376 - it
+	                               after the screen's VBLANK). 0: at the frame's end */
 } cave_board_desc;
 
 /* The board being run: its description (DonPachi's until a game chooses its own). Set it before cave_reset */

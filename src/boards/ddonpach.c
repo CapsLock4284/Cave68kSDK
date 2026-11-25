@@ -167,7 +167,10 @@ static const cave_sound_desc ddonpach_sound = {
    004B70, the title's "2COINS TO START" in 003C48). A continue then takes 1: free play drops 2 for it, 1 left over */
 static const cave_credits_desc ddonpach_credits = { 0x1013AAu, 0x101297u, 0 };
 
+/* The VBLANK's interrupt 90 us before the frame's end (MAME's init_ddonpach, by init_donpachi: m_time_vblank_irq =
+   90): checked against MAME 0.289's own ddonpach, the reads of the interrupt's cause the same to within 40 cycles
+   through VBLANK 811 (DoDonPachi Recomp's tests/mame_compare, tools/mame/ddp_check.lua) */
 const cave_board_desc cave_board_ddonpach = {
 	"ddonpach", ddonpach_map, COUNT(ddonpach_map), &ddonpach_roms, &ddonpach_video, &ddonpach_sound,
-	&ddonpach_credits
+	&ddonpach_credits, 90u
 };

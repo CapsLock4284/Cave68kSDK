@@ -150,7 +150,8 @@ static const cave_sound_desc donpachi_sound = {
    (034746) */
 static const cave_credits_desc donpachi_credits = { 0x10139Au, 0x101287u, 0 };
 
+/* The VBLANK's interrupt 90 us before the frame's end (MAME's init_donpachi: m_time_vblank_irq = 90) */
 const cave_board_desc cave_board_donpachi = {
 	"donpachi", donpachi_map, COUNT(donpachi_map), &donpachi_roms, &donpachi_video, &donpachi_sound,
-	&donpachi_credits
+	&donpachi_credits, 90u
 };

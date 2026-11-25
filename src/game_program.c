@@ -61,6 +61,16 @@ uint64_t m68k_time = RESET_CYCLES, m68k_event_at = FRAME_CYCLES;
 static uint64_t m68k_vblank_at = FRAME_CYCLES;
 uint32_t m68k_extra;    /* (the data's or a branch's cycles m68k_cycles added to the instruction m68k_block ends) */
 static bool slowdown = true;       /* the port's setting: a VBLANK may come while the program works */
+static bool vblank_lead = true;    /* the VBLANK early, by the board's description (program_set_vblank_lead) */
+
+/* the cycles the VBLANK's interrupt comes before the frame's end: the description's vblank_lead_usec (MAME's
+   m_time_vblank_irq), or 0. The VBLANKs then fall at FRAME_CYCLES * N less these from the power on (and from a
+   reset), the frame's length the same */
+static uint64_t lead_cycles(void)
+{
+	return vblank_lead && cave_board_description
+		? (uint64_t)cave_board_description->vblank_lead_usec * (CAVE_CPU_CLOCK / 1000000u) : 0u;
+}
 static bool timed;                 /* the program counts its cycles */
 static uint64_t slow_frames;       /* the VBLANKs that came while it worked */
 static bool lagged;                /* the last one did */
@@ -486,7 +496,7 @@ static void reset_board(void)
 	depth = 0;
 	m68k_time = time_at_wait = work_began = handled_at = RESET_CYCLES;
 	m68k_extra = 0;
-	m68k_vblank_at = FRAME_CYCLES;
+	m68k_vblank_at = FRAME_CYCLES - lead_cycles();
 	schedule();
 	waiting = lagged = false;
 }
@@ -570,7 +580,7 @@ const char *program_start(void)
 	interrupts = 0;
 	m68k_time = time_at_wait = work_began = handled_at = RESET_CYCLES;
 	m68k_extra = 0;
-	m68k_vblank_at = FRAME_CYCLES;
+	m68k_vblank_at = FRAME_CYCLES - lead_cycles();
 	schedule();
 	slow_frames = 0;
 	waiting = false;
@@ -726,6 +736,16 @@ uint32_t program_interrupts(void)
 void program_set_slowdown(bool on)
 {
 	slowdown = on;
+}
+
+void program_set_vblank_lead(bool on)
+{
+	vblank_lead = on;
+}
+
+bool program_vblank_lead(void)
+{
+	return vblank_lead;
 }
 
 bool program_slowdown(void)
