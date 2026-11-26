@@ -76,12 +76,14 @@ extern void (*program_at_wait)(void);
 extern void (*program_after_vblank)(void);
 
 /* Called, when set, at the screen's own VBLANK: the frame's end, the board's vblank_lead_usec after its vblank
-   interrupt came (program_set_vblank_lead), at the end of the instruction it comes in: by then the interrupt's
-   handler has flipped the sprite banks and set the layers' scroll and the palette, and the program's work may have
-   gone on (a fade's step, a register written early in the frame). MAME draws the screen there; a port that draws its
-   picture there, with the sprites latched when the interrupt came (program_run_frame's return), shows what MAME shows:
-   checked against MAME's own ddonpach at every picture before the games part (DoDonPachi Recomp's
-   tests/mame_compare). With no lead (a board without one, or the lead off), as the vblank interrupt returns, as
+   interrupt came (program_set_vblank_lead), at the end of the instruction it comes in. The interrupt's handler may
+   still be running then (DoDonPachi's in every frame, by up to 4.5 ms; DonPachi's now and then, by up to 2 ms): what
+   it has set of the layers' scroll and the palette by then is in the picture, the rest not (in 5% and 2% of the
+   frames the picture differs from one drawn as the handler returns: a colour's step, the scroll a frame behind).
+   MAME draws the screen there; a port that draws its picture there, with the sprites latched when the interrupt came
+   (program_run_frame's return), shows what MAME shows: checked against MAME's own ddonpach at every picture before
+   the games part (DoDonPachi Recomp's tests/mame_compare). The board itself draws line by line as the screen
+   scans, the handler's later writes reaching the lines drawn after them: neither point is it exactly. With no lead (a board without one, or the lead off), as the vblank interrupt returns, as
    program_after_vblank. Only the picture: nothing the program runs changes with it */
 extern void (*program_at_screen_vblank)(void);
 
