@@ -1,7 +1,7 @@
 # Notices
 
 Cave68kSDK contains code written after, or taken from, the following projects. All are under the
-BSD-3-Clause licence.
+BSD-3-Clause licence, but for the port kit's sources named below.
 
 ## MAME
 
@@ -17,6 +17,18 @@ sound code follow these files (each source file names the parts it follows and t
 - `src/devices/machine/nmk112.cpp` (Alex W. Jackson): the NMK112
 - `src/devices/sound/ymz280b.cpp` (Aaron Giles): the YMZ280B
 - `src/emu/sound.cpp`, `resampler.cpp`, `audio_effects/filter.cpp`: the resampler and the output filter
+
+## The port kit (`port/`)
+
+- `port/scaler.c`: this project's own code, after the published algorithms: Scale2x/Scale3x (EPX, as
+  AdvanceMAME describes it), xBR (Hyllian, whose shaders are under the MIT licence) and MMPX (Morgan McGuire and
+  Mara Gagiu, 2021, MIT licence).
+- `port/gadget_canvas.c`: the glyphs' filling after font-rs (Raph Levien, Apache-2.0/MIT: its accumulation
+  rasteriser, written again in C).
+- `port/gadget_font.h`: the outlines of [Chakra Petch](https://github.com/cadsondemak/Chakra-Petch), Copyright 2018
+  The Chakra Petch Project Authors, under the SIL Open Font License 1.1 (`port/fonts/OFL-ChakraPetch.txt`). A game
+  that uses it carries that licence with its program.
+- The port kit uses [SDL2](https://www.libsdl.org/) (zlib licence), which a game supplies.
 
 ## tmntarcade-decomp
 

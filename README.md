@@ -50,6 +50,31 @@ Until a game chooses, the board is DonPachi's.
 | `src/inflate.c` | Deflate for .zip reading |
 | `src/boards/donpachi.c` | DonPachi's description (US and Japanese sets) |
 | `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus, ROM set, picture and sound |
+| `port/` | the port kit: the SDL2 parts every game's port shares (below) |
+
+## The port kit (`port/`)
+
+The parts of a game's SDL2 port that are the same for every game, kept here so each is written once. They are
+not in the `cave68k` library (they need SDL2): a game compiles them into its own program, with `port/` on its
+include path and its names given to `paths.c`:
+
+| File | What it does |
+|---|---|
+| `port/paths.c` | where the player's files are kept: beside the program, or the user's own folder for the game when that can't be written (`CAVE_PORT_FOLDER`, e.g. `"DonPachi"`; `CAVE_PORT_STEM`, e.g. `"donpachi"`) |
+| `port/file_save.c` | the player's files saved by a helper thread, so a frame never waits for the disk |
+| `port/updater.c` | the program updating itself from the game's GitHub releases (WinHTTP on Windows, the curl command elsewhere) |
+| `port/scaler.c` | the pixel-art scalers: Scale2x, Scale3x, xBR 2x/3x/4x, MMPX |
+| `port/layer_filter.c` | a scaler run on each layer and the sprites apart, then put together again (`video_draw_planes`) |
+| `port/crt.c` | the CRT look: scanlines, the mask, the glow, the curve |
+| `port/gadget_canvas.c`, `port/gadget_font.h` | drawing for the gadget side panels: boxes, gradients and smooth text at any size, in Chakra Petch (`port/fonts/OFL-ChakraPetch.txt`; `tools/make_gadget_font.py` writes the font's header) |
+
+```cmake
+set(CAVE_PORT_KIT runtime/port/paths.c runtime/port/updater.c runtime/port/crt.c runtime/port/scaler.c
+	runtime/port/layer_filter.c runtime/port/file_save.c runtime/port/gadget_canvas.c)
+add_executable(mygame WIN32 ports/sdl2/main.c ... ${CAVE_PORT_KIT})
+target_include_directories(mygame PRIVATE runtime/port)
+target_compile_definitions(mygame PRIVATE CAVE_PORT_FOLDER="MyGame" CAVE_PORT_STEM="mygame")
+```
 
 ## Building
 
