@@ -102,20 +102,27 @@ Japanese versions, and comparing with the traces of the runtime before the chang
 files must also stay byte for byte the same, so that players' existing files keep working. The tools for
 this are in DonPachi Recomp's `tests/harness`.
 
+Each game is also checked against its original program on MAME's 68000 core on this board model, frame by frame
+(the same board, and the same frames slowed down), and against the real MAME's own pictures and sound: all 120 of
+DoDonPachi's pictures and all 80 of DonPachi's drawn the same as MAME's to the pixel, DonPachi's sound the same in
+loudness and in every band from 20 Hz up. The games' own repositories have the tools (`tools/mame`).
+
 ## Roadmap
 
 1. **Done:** the runtime split out of DonPachi Recomp, with its history.
 2. **Done:** the board description: bus, ROM set, picture and sound settings taken out of the code and into
    `src/boards/donpachi.c`, with DonPachi unchanged (identical traces).
 3. **Done:** DonPachi Recomp builds against this SDK as its `runtime/` submodule.
-4. **Started:** a second game, DoDonPachi. Its program, translated by DoDonPachi Recomp's tools, runs on the SDK:
-   its warning, title and attract demo are drawn right, and over 72,000 VBLANKs of play it matches the original
-   program on MAME's 68000 core at every one of 70,684 game frames: the same board, and the same frames slowed
-   down. Done: its bus map and ROM set, its 8-bit text layer, its palette's banks of 256, its sprites, the interrupt
-   cause's bit 2 as MAME has it, the board's memory addresses per game (`game_board.h`). To do: the YMZ280B sound
-   chip.
-5. More of the family as they are wanted: the 013's zooming sprite format, row-scroll and row-select on the
-   layers, flipped screens, other screen sizes (384×240 boards) and four-layer boards.
+4. **Done:** a second game, DoDonPachi ([DoDonPachi Recomp](https://github.com/CapsLock4284/DoDonPachi-Recomp)):
+   its bus map and ROM set, its 8-bit text layer, its palette's banks of 256, its sprites, the layers' row-scroll
+   and row-select, the interrupt cause's bit 2 as MAME has it, the board's memory addresses per game
+   (`game_board.h`) and the YMZ280B with its interrupt. Over 72,000 VBLANKs of play it matches the original program
+   on MAME's 68000 core at every game frame, the slowdown with it.
+5. **Done:** the port kit (`port/`): the parts of the SDL2 ports that every game shares, taken out of both games.
+6. **Next:** a third game, ESP Ra.De., and with it what the rest of the family needs as it comes up: the 013's
+   zooming sprite format, flipped screens, other screen sizes (384×240 boards) and four-layer boards.
+7. More of the ports' shared parts into the port kit as they settle (the gamepads, the crash log, the high score
+   file, the ROM set's first-run screen), and the board checks into this repository.
 
 ## Licence
 
