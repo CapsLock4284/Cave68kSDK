@@ -125,6 +125,11 @@ extern uint64_t (*cave_clock)(void);
    timers at the access: a few cycles later) */
 extern uint64_t (*cave_access_clock)(void);
 
+/* Called, when set, as the program reads the interrupt's cause (900000-900007, 'word' 0-3) or an OKI M6295's status
+   (4, 5: #0, #1), with what the board answered: the test tools set the port's reads beside MAME's
+   (tests/harness/mame_check, dp_check.lua's irq.txt) */
+extern void (*cave_irq_cause_read)(uint32_t word, uint16_t value);
+
 /* The screen's VBLANK begins: the interrupt, and the frame's sound (cave_sound_frame) */
 void cave_vblank_start(void);
 

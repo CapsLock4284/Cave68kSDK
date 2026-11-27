@@ -163,6 +163,8 @@ void cave_vblank_start(void)
    low (high: the sound chip's interrupt; the chip's interrupt in those 2000 us gets the frame's work again). Read at
    the instruction's start (cave_access_clock). DonPachi's handler does not read it */
 #define AGALLET_CYCLES (CAVE_CPU_CLOCK / 1000000u * 2000u)    /* 2000 us of the 68000: 32,000 cycles */
+void (*cave_irq_cause_read)(uint32_t word, uint16_t value);
+
 static uint16_t irq_cause(uint32_t word)
 {
 	uint16_t result = 0x0003u;
@@ -332,12 +334,26 @@ uint16_t cave_read16(uint32_t address, uint16_t mem_mask)
 	{
 		const uint32_t word = word_in(r, address);
 
-		return word < 4u ? irq_cause(word) : 0u;
+		if (word < 4u)
+		{
+			const uint16_t value = irq_cause(word);
+
+			if (cave_irq_cause_read)
+				cave_irq_cause_read(word, value);
+			return value;
+		}
+		return 0u;
 	}
 	case CAVE_REGION_PALETTE:
 		return cave_board.palette[word_in(r, address)];
 	case CAVE_REGION_OKI:
-		return cave_sound_status(r->unit);
+	{
+		const uint16_t value = cave_sound_status(r->unit);
+
+		if (cave_irq_cause_read)
+			cave_irq_cause_read(4u + r->unit, value);    /* (4, 5: the sound chips' status) */
+		return value;
+	}
 	case CAVE_REGION_YMZ280B:
 		return cave_sound_ymz_read((int)(word_in(r, address) & 1u));    /* (the chip's byte: the low one) */
 	case CAVE_REGION_INPUTS:
