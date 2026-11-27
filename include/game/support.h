@@ -178,6 +178,11 @@ void take_interrupts(void);
    cave/sound.h): m68k_event_at is the first of them and the VBLANK, and m68k_event_came has those that came by the
    point 'at' come, in their order, then the program takes the interrupts they raised */
 extern uint64_t m68k_time, m68k_event_at;
+
+/* A value a routine pushes before it calls others that read it from its stack (ESP Ra.De.'s 03AF1C: a byte pushed,
+   then five routines that each read it at their entry's +4): the translator's C hands it over here, as the routines'
+   own stacks are the C's locals (the game's tools/call_tables.py: PASSED_PUSHES and PASSED_READS) */
+extern uint32_t m68k_passed;
 extern uint32_t m68k_extra;
 void m68k_event_came(uint64_t at);
 

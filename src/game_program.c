@@ -58,6 +58,7 @@ static bool started;               /* the program has begun (its first frame run
 /* the board's time (game/support.h): the 68000's cycles, when the next VBLANK comes, and when the next of the board's
    events comes (the VBLANK, or a YMZ280B board's sound chip's interrupt: cave_sound_event_at) */
 uint64_t m68k_time = RESET_CYCLES, m68k_event_at = FRAME_CYCLES;
+uint32_t m68k_passed;    /* (game/support.h) */
 static uint64_t m68k_vblank_at = FRAME_CYCLES;
 uint32_t m68k_extra;    /* (the data's or a branch's cycles m68k_cycles added to the instruction m68k_block ends) */
 static bool slowdown = true;       /* the port's setting: a VBLANK may come while the program works */

@@ -6,7 +6,8 @@
  *
  *    license:BSD-3-Clause
  *    After MAME (BSD-3-Clause, Luca Elia and others): cave_v.cpp's screen_update and tilemap_draw, sprite013.cpp's
- *    sprites (DonPachi's and DoDonPachi's: the "alt" format, no zoom), tmap038.cpp's tiles, and the layers' row-scroll
+ *    sprites (DonPachi's and DoDonPachi's: the "alt" format, no zoom; ESP Ra.De.'s: the zooming format, 8 bits a
+ *    pixel), tmap038.cpp's tiles, and the layers' row-scroll
  *    and row-select (from each layer's line RAM; the 8x8-only layer has none). Not yet: flipped layers and sprites
  *    (the games set neither: their screen-flip setting is the cabinet's).
  *    17-11-2026: the layers in one pass (a line of each fetched a tile at a time, each pixel the layer MAME's order
@@ -224,13 +225,160 @@ static void draw_layers(uint32_t *frame, uint32_t *const *planes)
 	}
 }
 
-/* ---- the sprites (sprite013, DonPachi's format: 8 words a sprite, no zoom) ---- */
+/* ---- the sprites (sprite013: 8 words a sprite, DonPachi's format without zoom, or the zooming one) ---- */
 
+/* the sprites' pixel 'pixel' (from the region's start: 256 a code, 16 a row of a 16-pixel block) */
 static unsigned sprite_pen(uint32_t pixel)
 {
-	const uint8_t byte = rom_set.sprites[(pixel >> 1) & sprites_mask];
+	if (VIDEO->sprite_bits == 8u)
+	{
+		/* (MAME's layout_sprites_8bpp: 16 bytes a row of 16 pixels, 4 bytes a group of 4; a pixel's high nibble in
+		   the group's first word, its low nibble in the second, pixels 0 and 1 in the word's second byte (low nibble
+		   first), 2 and 3 in its first) */
+		const uint32_t group = (pixel >> 2) * 4u, k = pixel & 3u, byte = group + (k < 2u ? 1u : 0u);
+		const unsigned shift = (k & 1u) ? 4u : 0u;
+		const unsigned high = rom_set.sprites[byte & sprites_mask] >> shift & 15u;
+		const unsigned low = rom_set.sprites[(byte + 2u) & sprites_mask] >> shift & 15u;
 
-	return ((pixel & 1u) != 0) != (VIDEO->sprite_low_first != 0) ? (byte & 15u) : (byte >> 4);
+		return high << 4 | low;
+	}
+	{
+		const uint8_t byte = rom_set.sprites[(pixel >> 1) & sprites_mask];
+
+		return ((pixel & 1u) != 0) != (VIDEO->sprite_low_first != 0) ? (byte & 15u) : (byte >> 4);
+	}
+}
+
+/* sprite013's draw_single_sprite_nozoom: a sprite of 'width' x 'height' at (x, y), its rows on the screen only */
+static void draw_sprite(uint32_t code, uint16_t colpri, int x, int y, int flipx, int flipy, int width, int height)
+{
+	const int row0 = y < 0 ? -y : 0, row1 = y + height > VIDEO_HEIGHT ? VIDEO_HEIGHT - y : height;
+	const int column0 = x < 0 ? -x : 0, column1 = x + width > VIDEO_WIDTH ? VIDEO_WIDTH - x : width;
+
+	for (int row = row0; row < row1; row++)
+	{
+		const int src_y = flipy ? height - 1 - row : row;
+		const uint32_t line = (code << 8) + (uint32_t)(src_y * width);
+		uint16_t *const out = &sprite_layer[y + row][x];
+
+		for (int column = column0; column < column1; column++)
+		{
+			const unsigned pen = sprite_pen(line + (uint32_t)(flipx ? width - 1 - column : column));
+
+			if (pen)
+				out[column] = (uint16_t)(pen | colpri);
+		}
+	}
+}
+
+/* sprite013's draw_single_sprite_zoom: each of the sprite's pixels at most once, 'zoom_x' / 256 of a screen pixel
+   from the last (a smaller sprite leaves pixels out, a larger one gaps), in 1/256ths of a pixel, as MAME */
+static void draw_sprite_zoom(uint32_t code, uint16_t colpri, int x, int y, int flipx, int flipy, int width, int height,
+	int zoom_x, int zoom_y)
+{
+	const int right = VIDEO_WIDTH << 8, bottom = VIDEO_HEIGHT << 8;
+	const int src_x_end = flipx ? -1 : width, src_x_inc = flipx ? -1 : 1;
+	const int src_y_end = flipy ? -1 : height, src_y_inc = flipy ? -1 : 1;
+	int draw_x0 = x * 256, draw_y0 = y * 256;
+	int src_x0 = flipx ? width - 1 : 0, src_y = flipy ? height - 1 : 0;
+
+	while (draw_x0 < 0)
+	{
+		src_x0 += src_x_inc;
+		if (src_x0 == src_x_end)
+			return;
+		draw_x0 += zoom_x;
+	}
+	while (draw_y0 < 0)
+	{
+		src_y += src_y_inc;
+		if (src_y == src_y_end)
+			return;
+		draw_y0 += zoom_y;
+	}
+	if (draw_x0 >= right || draw_y0 >= bottom)
+		return;
+	for (int draw_y = draw_y0; src_y != src_y_end && draw_y < bottom; draw_y += zoom_y, src_y += src_y_inc)
+	{
+		uint16_t *const out = sprite_layer[draw_y >> 8];
+		const uint32_t line = (code << 8) + (uint32_t)(src_y * width);
+
+		for (int draw_x = draw_x0, src_x = src_x0; src_x != src_x_end && draw_x < right;
+			draw_x += zoom_x, src_x += src_x_inc)
+		{
+			const unsigned pen = sprite_pen(line + (uint32_t)src_x);
+
+			if (pen)
+				out[draw_x >> 8] = (uint16_t)(pen | colpri);
+		}
+	}
+}
+
+/* a 10-bit position, signed (util::sext(value & 0x3ff, 10)) */
+static int signed10(int value)
+{
+	value &= 0x3FF;
+	return value & 0x200 ? value - 0x400 : value;
+}
+
+/* sprite013's draw_sprites for the zooming format, its sprite 'source' (8 words): false when the chip's time for the
+   frame has run out ('clock', what it has used). The position is a 10-bit integer, or with video register 5's bits
+   12-13 set a fixed point number (S.9.6); MAME's global flips and offsets are 0 here (the games set none) */
+static int latch_zoomed(const uint16_t *source, uint32_t *clock)
+{
+	const int fixed = (cave_board.video_regs[5] & 0x3000u) != 0;
+	int x = fixed ? (int)source[0] << 2 : (int)(source[0] & 0x3FFu) << 8;
+	int y = fixed ? (int)source[1] << 2 : (int)(source[1] & 0x3FFu) << 8;
+	const uint16_t attr = source[2];
+	const uint32_t code = source[3] + ((uint32_t)(attr & 3u) << 16);
+	const int zoom_x = source[4], zoom_y = source[5];
+	const uint16_t size = source[6];
+	const int width = (size >> 8 & 0x1F) * 16, height = (size & 0x1F) * 16;
+	const int flipx = (attr & 8u) != 0, flipy = (attr & 4u) != 0;
+	int total_width, total_height, total_width_f, total_height_f;
+
+	if (!width || !height)
+		return 1;
+	*clock += (uint32_t)(width * height);    /* (counted before the sprite is known to be on the screen, as MAME) */
+	if (*clock > MAX_SPRITE_CLOCK)
+		return 0;
+	total_width = (total_width_f = width * zoom_x) / 0x100;
+	total_height = (total_height_f = height * zoom_y) / 0x100;
+	if (total_width <= 1)
+		x -= 0x80;
+	if (total_height <= 1)
+		y -= 0x80;
+	if (!fixed)
+	{
+		x >>= 8;
+		y >>= 8;
+		if (flipx && zoom_x != 0x100)
+			x += width - total_width;
+		if (flipy && zoom_y != 0x100)
+			y += height - total_height;
+	}
+	else
+	{
+		if (flipx && zoom_x != 0x100)
+			x += (width << 8) - total_width_f - 0x80;
+		if (flipy && zoom_y != 0x100)
+			y += (height << 8) - total_height_f - 0x80;
+		x >>= 8;
+		y >>= 8;
+	}
+	x = signed10(x);
+	y = signed10(y);
+	if (x + total_width <= 0 || x >= VIDEO_WIDTH || y + total_height <= 0 || y >= VIDEO_HEIGHT)
+		return 1;
+	{
+		const uint16_t colpri = (uint16_t)((attr & 0x0030u) << 10 | (attr & 0x3F00u));
+
+		if (zoom_x == 0x100 && zoom_y == 0x100)
+			draw_sprite(code, colpri, x, y, flipx, flipy, width, height);
+		else
+			draw_sprite_zoom(code, colpri, x, y, flipx, flipy, width, height, zoom_x, zoom_y);
+	}
+	return 1;
 }
 
 void video_latch_sprites(void)
@@ -255,6 +403,12 @@ void video_latch_sprites(void)
 		clock += 32u;
 		if (clock > MAX_SPRITE_CLOCK)
 			break;
+		if (VIDEO->sprites == CAVE_SPRITES_013_ZOOM)
+		{
+			if (!latch_zoomed(source, &clock))
+				break;
+			continue;
+		}
 		if (x & 0x200)
 			x -= 0x400;
 		if (y & 0x200)
@@ -264,26 +418,7 @@ void video_latch_sprites(void)
 		clock += (uint32_t)(width * height);
 		if (clock > MAX_SPRITE_CLOCK)
 			break;
-		{
-			/* (the rows and columns on the screen only) */
-			const int row0 = y < 0 ? -y : 0, row1 = y + height > VIDEO_HEIGHT ? VIDEO_HEIGHT - y : height;
-			const int column0 = x < 0 ? -x : 0, column1 = x + width > VIDEO_WIDTH ? VIDEO_WIDTH - x : width;
-
-			for (int row = row0; row < row1; row++)
-			{
-				const int src_y = flipy ? height - 1 - row : row;
-				const uint32_t line = (code << 8) + (uint32_t)(src_y * width);
-				uint16_t *const out = &sprite_layer[y + row][x];
-
-				for (int column = column0; column < column1; column++)
-				{
-					const unsigned pen = sprite_pen(line + (uint32_t)(flipx ? width - 1 - column : column));
-
-					if (pen)
-						out[column] = (uint16_t)(pen | colpri);
-				}
-			}
-		}
+		draw_sprite(code, colpri, x, y, flipx, flipy, width, height);
 	}
 }
 

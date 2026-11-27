@@ -314,6 +314,13 @@ static void put_file(cave_rom_set *set, const cave_rom_load *load, const uint8_t
 		for (uint32_t i = 0; i < size; i++)
 			(*target)[load->offset + (load->mode == CAVE_LOAD_ODD) + 2u * i] = chip[i];
 		break;
+	case CAVE_LOAD_LONG_SWAPPED:    /* ROM_LOAD32_WORD_SWAP: every other word, each word's bytes swapped */
+		for (uint32_t i = 0; i + 1u < size; i += 2u)
+		{
+			(*target)[load->offset + 2u * i] = chip[i + 1u];
+			(*target)[load->offset + 2u * i + 1u] = chip[i];
+		}
+		break;
 	default:
 		memcpy(*target + load->offset, chip, size);
 		break;
@@ -327,8 +334,9 @@ static bool loads_fit(void)
 	{
 		const cave_rom_load *const load = &ROMS->loads[index];
 
-		const uint32_t span = load->mode == CAVE_LOAD_EVEN || load->mode == CAVE_LOAD_ODD
-			? 2u * files[load->file].size : files[load->file].size;
+		/* (the bytes from 'offset' to the last one written: a long's second word ends 2 before the next long) */
+		const uint32_t span = load->mode == CAVE_LOAD_EVEN || load->mode == CAVE_LOAD_ODD ? 2u * files[load->file].size
+			: load->mode == CAVE_LOAD_LONG_SWAPPED ? 2u * files[load->file].size - 2u : files[load->file].size;
 
 		if (load->file >= files_count || load->region >= CAVE_ROM_REGIONS
 				|| load->offset + span > ROMS->region_size[load->region])

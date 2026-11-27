@@ -3,6 +3,20 @@
 What has changed in Cave68kSDK, newest first, by date. The SDK has no releases of its own: each game takes a commit
 of it as its `runtime/` submodule.
 
+## 2026-11-27
+
+### Added
+- **ESP Ra.De.'s board** (`src/boards/esprade.c`, `cave_board_esprade`): DoDonPachi's bus with three whole 8-bit
+  layers, the YMZ280B, the VBLANK's interrupt 2,000 µs early; its three versions' ROM sets.
+- **The 013's zooming sprites** (`CAVE_SPRITES_013_ZOOM`): sprite013.cpp's zooming format and drawing (each pixel
+  at most once, as MAME), and sprites at 8 bits a pixel (`sprite_bits`, MAME's layout_sprites_8bpp).
+- `CAVE_LOAD_LONG_SWAPPED`: ROM_LOAD32_WORD_SWAP.
+- `m68k_passed` (game/support.h): a value a routine pushes for the routines it then calls, which read it from its
+  stack (ESP Ra.De.'s 03AF1C), handed over by the translated C.
+
+### Changed
+- `video.c`: the no-zoom sprite drawing as a function of its own (DonPachi's pictures the same).
+
 ## 2026-11-26
 
 ### Added

@@ -22,6 +22,10 @@ extern const cave_board_desc cave_board_donpachi;
    sound (a YMZ280B) */
 extern const cave_board_desc cave_board_ddonpach;
 
+/* ESP Ra.De. (Cave, ATC04; MAME's esprade, espradej and espradejo): src/boards/esprade.c. DoDonPachi's bus with three
+   whole 8-bit layers, the 013's zooming sprites (8 bits a pixel) and a YMZ280B */
+extern const cave_board_desc cave_board_esprade;
+
 #ifdef __cplusplus
 }
 #endif

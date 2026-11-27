@@ -50,6 +50,7 @@ Until a game chooses, the board is DonPachi's.
 | `src/inflate.c` | Deflate for .zip reading |
 | `src/boards/donpachi.c` | DonPachi's description (US and Japanese sets) |
 | `src/boards/ddonpach.c` | DoDonPachi's description (World and Japanese sets): bus, ROM set, picture and sound |
+| `src/boards/esprade.c` | ESP Ra.De.'s description (World and both Japanese sets): three 8-bit layers, the 013's zooming 8-bit sprites |
 | `port/` | the port kit: the SDL2 parts every game's port shares (below) |
 
 ## The port kit (`port/`)
@@ -119,8 +120,10 @@ loudness and in every band from 20 Hz up. The games' own repositories have the t
    (`game_board.h`) and the YMZ280B with its interrupt. Over 72,000 VBLANKs of play it matches the original program
    on MAME's 68000 core at every game frame, the slowdown with it.
 5. **Done:** the port kit (`port/`): the parts of the SDL2 ports that every game shares, taken out of both games.
-6. **Next:** a third game, ESP Ra.De., and with it what the rest of the family needs as it comes up: the 013's
-   zooming sprite format, flipped screens, other screen sizes (384×240 boards) and four-layer boards.
+6. **Started:** a third game, ESP Ra.De. ([ESP Ra.De. Recomp](https://github.com/CapsLock4284/ESPRaDe-Recomp)):
+   its board description, 32-bit word-swapped ROM loads and the 013's zooming sprites at 8 bits a pixel are in; its
+   translated program boots to the player select. Still to come for the rest of the family: flipped screens, other
+   screen sizes (384×240 boards) and four-layer boards.
 7. More of the ports' shared parts into the port kit as they settle (the gamepads, the crash log, the high score
    file, the ROM set's first-run screen), and the board checks into this repository.
 

@@ -82,7 +82,9 @@ typedef enum
 	CAVE_LOAD_SWAPPED,          /* swapped in pairs (ROM_LOAD16_WORD_SWAP) */
 	CAVE_LOAD_EVEN,             /* to every other byte from 'offset': the 16-bit words' high bytes (ROM_LOAD16_BYTE
 	                               at an even offset) */
-	CAVE_LOAD_ODD               /* the same from 'offset' + 1: the words' low bytes */
+	CAVE_LOAD_ODD,              /* the same from 'offset' + 1: the words' low bytes */
+	CAVE_LOAD_LONG_SWAPPED      /* each 16-bit word's bytes the other way round, to every other word from 'offset'
+	                               (ROM_LOAD32_WORD_SWAP: two files make the 32-bit longs, one at 0, one at 2) */
 } cave_load_mode;
 
 /* A file's place: file 'file' (in the version's list) put at 'offset' in 'region', as 'mode' says
@@ -118,7 +120,9 @@ typedef struct
 
 typedef enum
 {
-	CAVE_SPRITES_013            /* the 013: 8 words a sprite, no zoom (DonPachi's) */
+	CAVE_SPRITES_013,           /* the 013: 8 words a sprite, no zoom (DonPachi's: sprite013's "alt" format) */
+	CAVE_SPRITES_013_ZOOM       /* the 013's own format: 8 words a sprite, the position first, then a zoom for x and y
+	                               (ESP Ra.De.'s and most of the family's) */
 } cave_sprite_format;
 
 typedef struct
@@ -138,6 +142,8 @@ typedef struct
 	                               16 used); 0 is 16 */
 	uint8_t sprite_low_first;   /* the sprites' ROM bytes hold their two pixels low nibble first (1) or high first
 	                               (0: DonPachi's, its ROMs word swapped) */
+	uint8_t sprite_bits;        /* the sprites' bits a pixel: 4 (0 is 4), or 8 (MAME's layout_sprites_8bpp: ESP Ra.De.,
+	                               Guwange) */
 } cave_video_desc;
 
 /* ---- the sound ---- */
