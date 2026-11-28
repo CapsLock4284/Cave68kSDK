@@ -13,9 +13,16 @@ of it as its `runtime/` submodule.
 - `CAVE_LOAD_LONG_SWAPPED`: ROM_LOAD32_WORD_SWAP.
 - `m68k_passed` (game/support.h): a value a routine pushes for the routines it then calls, which read it from its
   stack (ESP Ra.De.'s 03AF1C), handed over by the translated C.
+- `cave_write_seen` (cave/machine.h): a probe hook for the tools, each write to the board's devices (not the work
+  RAM) with its address, data and mask.
 
 ### Changed
 - `video.c`: the no-zoom sprite drawing as a function of its own (DonPachi's pictures the same).
+
+### Fixed
+- The interrupt's cause read at the very cycle the VBLANK comes: the VBLANK counts as begun for that read
+  (`cave_vblank_due`, set by game_program.c in a timed program), as MAME's 68000 sees it. ESP Ra.De. polled it there
+  in its 5th game frame and counted its random index one round off.
 
 ## 2026-11-26
 

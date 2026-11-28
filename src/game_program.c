@@ -393,6 +393,13 @@ static uint64_t vblank_time;    /* (the VBLANK's own cycle, for next_frame) */
    masks it (then as the program lets it through, in take_interrupts): on the board its handler then runs
    the sound and counts the frame and the random index on, and the program, its work done, waits for the VBLANK
    after. With slowdown off, the VBLANK waits for the program instead, as the frame timing has it */
+/* the next VBLANK's cycle, for the interrupt's cause read before the runtime has it (cave/machine.h's
+   cave_vblank_due): with the slowdown, a timed program's; none otherwise (the VBLANK then waits for the program) */
+static uint64_t vblank_due(void)
+{
+	return slowdown && timed ? m68k_vblank_at : UINT64_MAX;
+}
+
 static void vblank_came(void)
 {
 	bool was_waiting;
@@ -611,6 +618,7 @@ const char *program_start(void)
 	cave_sound_clock(cycles_now, FRAME_CYCLES);
 	cave_sound_events_changed = sound_events_changed;
 	cave_access_clock = instruction_start;
+	cave_vblank_due = vblank_due;
 	status = 0x2700u;
 	depth = 0;
 	interrupts = 0;

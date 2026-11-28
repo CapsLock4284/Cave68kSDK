@@ -164,12 +164,19 @@ void cave_vblank_start(void)
    the instruction's start (cave_access_clock). DonPachi's handler does not read it */
 #define AGALLET_CYCLES (CAVE_CPU_CLOCK / 1000000u * 2000u)    /* 2000 us of the 68000: 32,000 cycles */
 void (*cave_irq_cause_read)(uint32_t word, uint16_t value);
+uint64_t (*cave_vblank_due)(void);
+void (*cave_write_seen)(uint32_t address, uint16_t data, uint16_t mem_mask);
 
 static uint16_t irq_cause(uint32_t word)
 {
 	uint16_t result = 0x0003u;
+	const uint64_t at = cave_clock ? (cave_access_clock ? cave_access_clock() : cave_clock()) : 0u;
+	const uint64_t due = cave_vblank_due ? cave_vblank_due() : UINT64_MAX;
+	/* (a VBLANK due by the read's time that the runtime has not had yet: the board's answer is its; words 0 and 1
+	   only, the reads that clear nothing) */
+	const bool begun = cave_clock && word < 2u && due <= at;
 
-	if (cave_board.vblank_irq)
+	if (cave_board.vblank_irq || begun)
 		result ^= 0x01u;
 	if (cave_board.unknown_irq)
 		result ^= 0x02u;
@@ -177,8 +184,7 @@ static uint16_t irq_cause(uint32_t word)
 		cave_board.vblank_irq = false;
 	if (word == 3)
 		cave_board.unknown_irq = false;
-	if (word == 0 && !(cave_clock && (cave_access_clock ? cave_access_clock() : cave_clock()) - cave_board.vblank_began
-		< AGALLET_CYCLES))
+	if (word == 0 && !(cave_clock && at - (begun ? due : cave_board.vblank_began) < AGALLET_CYCLES))
 		result |= 4u;
 	return result;
 }
@@ -376,6 +382,8 @@ void cave_write16(uint32_t address, uint16_t data, uint16_t mem_mask)
 		combine((uint16_t *)cave_work_ram_at(address, 2u), data, mem_mask);
 		return;
 	}
+	if (cave_write_seen)
+		cave_write_seen(address, data, mem_mask);
 	{
 		const ram_page *const p = &ram_pages[address >> 16 & (PAGES - 1u)];
 

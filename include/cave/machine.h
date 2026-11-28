@@ -125,6 +125,16 @@ extern uint64_t (*cave_clock)(void);
    timers at the access: a few cycles later) */
 extern uint64_t (*cave_access_clock)(void);
 
+/* The cycle the next VBLANK's interrupt comes at, while the program's C runs an instruction (NULL, or UINT64_MAX:
+   none known). An instruction that begins at that cycle or after, before the runtime has had the VBLANK (it has it
+   as the instruction's point passes), reads the interrupt's cause as the board answers then: the VBLANK begun (ESP
+   Ra.De.'s boot polls bit 2, "btst #2, $800001; bne", and one of its reads begins on the VBLANK's own cycle) */
+extern uint64_t (*cave_vblank_due)(void);
+
+/* Called, when set, at each write to the board's devices (all but the work RAM), for the test tools: the writes of
+   the port and of MAME's 68000 (tools/cref) set side by side, each with its cycle */
+extern void (*cave_write_seen)(uint32_t address, uint16_t data, uint16_t mem_mask);
+
 /* Called, when set, as the program reads the interrupt's cause (900000-900007, 'word' 0-3) or an OKI M6295's status
    (4, 5: #0, #1), with what the board answered: the test tools set the port's reads beside MAME's
    (tests/harness/mame_check, dp_check.lua's irq.txt) */
