@@ -183,6 +183,14 @@ extern uint64_t m68k_time, m68k_event_at;
    then five routines that each read it at their entry's +4): the translator's C hands it over here, as the routines'
    own stacks are the C's locals (the game's tools/call_tables.py: PASSED_PUSHES and PASSED_READS) */
 extern uint32_t m68k_passed;
+
+/* Words a routine pushes in a loop, one for each of a list's records, and pops back after a call (ESP Ra.De.'s
+   03B7D8: 32 of them, the records of a boss's body): the C has no stack of the 68000's, nor a slot for each of a
+   count the code works out, so the translator's C keeps them here (m68k_saved[m68k_saved_count++] as pushed,
+   m68k_saved[--m68k_saved_count] as popped; the game's tools/call_tables.py: SAVED_WORDS) */
+#define M68K_SAVED_MOST 256
+extern uint16_t m68k_saved[M68K_SAVED_MOST];
+extern uint32_t m68k_saved_count;
 extern uint32_t m68k_extra;
 void m68k_event_came(uint64_t at);
 

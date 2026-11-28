@@ -13,6 +13,8 @@ of it as its `runtime/` submodule.
 - `CAVE_LOAD_LONG_SWAPPED`: ROM_LOAD32_WORD_SWAP.
 - `m68k_passed` (game/support.h): a value a routine pushes for the routines it then calls, which read it from its
   stack (ESP Ra.De.'s 03AF1C), handed over by the translated C.
+- `m68k_saved` (game/support.h): words a routine pushes in a loop and pops back after a call, kept by the runtime for
+  the translated C (ESP Ra.De.'s 03B7D8).
 - `cave_write_seen` (cave/machine.h): a probe hook for the tools, each write to the board's devices (not the work
   RAM) with its address, data and mask.
 
